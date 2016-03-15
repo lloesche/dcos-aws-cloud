@@ -103,7 +103,7 @@ class DCOS:
 
         :rtype: Union[str, None]
         :param key: The OutputKey name e.g. DnsAddress or PublicSlaveDnsAddress
-        :return: The key value as str or None
+        :return: The key value as str or None if the key wasn't found
         """
         stack = self.cf.Stack(self.settings['StackName'])
         for output in stack.outputs:
