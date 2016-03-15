@@ -2,9 +2,12 @@
 import boto3
 import time
 import yaml
-import requests
 import botocore.exceptions
 import logging
+import requests
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
+
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.getLogger('DCOS').setLevel(logging.DEBUG)
@@ -39,7 +42,7 @@ class DCOS:
         """
         self.settings = settings
         self.log = logging.getLogger(self.__class__.__name__)
-        self.adminurl_scheme = 'http://'
+        self.adminurl_scheme = 'https://'
         self.auth_header = None
         self.cf = boto3.resource('cloudformation', region_name=self.settings['Region'])
 
@@ -245,7 +248,7 @@ class DCOSAuth:
                             msg='adding user {} to group {}'.format(login, group)
                             )
 
-    def request(self, method, path, msg=None, json=None, retfmt='bool', errorfatal=True, autoauth=True):
+    def request(self, method, path, msg=None, json=None, retfmt='bool', errorfatal=True, autoauth=True, verify=False):
         # request with json in the body
         # Content-Type: application/json; charset=utf-8
         #
@@ -259,6 +262,7 @@ class DCOSAuth:
         :param path: The API path to send the request to
         :param msg: An optional log message
         :param json: Optional JSON data to be transmitted with the request
+        :param verify: Bool verify SSL certificate when using https adminurl
         :param retfmt: Return format (default=bool, json, request)
                        json will return the r.json() data
                        request will return the entire r object
@@ -280,13 +284,13 @@ class DCOSAuth:
             headers.update(self.auth_header)
 
         if method == 'get':
-            r = requests.get(url, headers=headers, json=json)
+            r = requests.get(url, headers=headers, json=json, verify=verify)
         elif method == 'post':
-            r = requests.post(url, headers=headers, json=json)
+            r = requests.post(url, headers=headers, json=json, verify=verify)
         elif method == 'put':
-            r = requests.put(url, headers=headers, json=json)
+            r = requests.put(url, headers=headers, json=json, verify=verify)
         elif method == 'delete':
-            r = requests.delete(url, headers=headers, json=json)
+            r = requests.delete(url, headers=headers, json=json, verify=verify)
 
         if 200 <= r.status_code < 300:
             log.debug("success")
