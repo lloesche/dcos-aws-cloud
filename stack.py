@@ -6,7 +6,7 @@ import requests
 import botocore.exceptions
 import logging
 
-logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.getLogger('DCOS').setLevel(logging.DEBUG)
 logging.getLogger('__main__').setLevel(logging.DEBUG)
 #logging.getLogger('requests').setLevel(logging.DEBUG)
@@ -16,9 +16,8 @@ def main():
     log.debug("reading stacks.yaml")
     stacks = yaml.load(open('stacks.yaml').read())
     for stack in stacks:
-        log.debug("processing stack {}".format(stack['StackName']))
         dcos = DCOS(stack)
-        #dcos.process_stack()
+        dcos.process_stack()
         dcos.check_login()
 
 class DCOS:
@@ -36,13 +35,14 @@ class DCOS:
             'Capabilities': ['CAPABILITY_IAM'],
             'Tags': [{'Key': 'author', 'Value': 'autoinstaller'}]
         }
+        wait = False
         stackdef = defaults.copy()
         stackdef.update(self.settings)
+        log.info("processing stack {}".format(stackdef['StackName']))
 
-        wait = False
 
         try:
-            log.info("trying to create stack {}".format(stackdef['StackName']))
+            log.debug("trying to create stack {}".format(stackdef['StackName']))
             stack = self.cf.create_stack(
                 StackName=stackdef['StackName'],
                 TemplateURL=stackdef['TemplateURL'],
@@ -54,11 +54,12 @@ class DCOS:
             wait = True
         except botocore.exceptions.ClientError as e:
             if e.response['Error']['Code'] == 'AlreadyExistsException':
+                log.debug("stack {} already exists".format(stackdef['StackName']))
                 try:
                     stack = self.cf.Stack(stackdef['StackName'])
                     log.info("stack {} has status {}".format(stack.name, stack.stack_status))
                     if stack.stack_status in ['CREATE_COMPLETE', 'UPDATE_COMPLETE']:
-                        log.info("trying to update stack {}".format(stackdef['StackName']))
+                        log.debug("trying to update stack {}".format(stackdef['StackName']))
                         stack.update(
                             StackName=stackdef['StackName'],
                             TemplateURL=stackdef['TemplateURL'],
@@ -68,14 +69,14 @@ class DCOS:
                         )
                         wait = True
                     else:
-                        log.info("stack {} is busy ({})".format(stack.name, stack.stack_status))
+                        log.info("stack {} is busy ({}) - retry again later".format(stack.name, stack.stack_status))
                 except botocore.exceptions.ClientError as e:
                     if e.response['Error']['Code'] == 'ValidationError':
-                        log.info("nothing to update in stack {}".format(stack.name))
+                        log.info("nothing to update for stack {}".format(stack.name))
                     else:
                         log.warning(e)
             else:
-                print(e)
+                log.warning(e)
 
         while wait and stack.stack_status not in ['CREATE_COMPLETE', 'UPDATE_COMPLETE']:
             time.sleep(5)
@@ -194,7 +195,7 @@ class DCOS:
 
     def get_auth_header(self, login, password):
         url = self.adminurl + '/acs/api/v1/auth/login'
-        log.info("trying to authenticate at {} with user {}".format(url, login))
+        log.debug("trying to authenticate at {} with user {}".format(url, login))
         r = requests.post(
             url,
             headers=self.default_headers,
