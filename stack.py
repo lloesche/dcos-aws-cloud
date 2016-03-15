@@ -155,6 +155,9 @@ class DCOS:
 
 
 class DCOSAuth:
+    """Used to acquire a DCOS authentication token to make requests to other DCOS components.
+    Can also create and delete users and assign them to groups.
+    """
     def __init__(self, adminurl, login=None, password=None, description=None):
         """Constructor
 
