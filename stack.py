@@ -12,6 +12,7 @@ logging.getLogger('__main__').setLevel(logging.DEBUG)
 #logging.getLogger('requests').setLevel(logging.DEBUG)
 log = logging.getLogger(__name__)
 
+
 def main():
     log.debug("reading stacks.yaml")
     stacks = yaml.load(open('stacks.yaml').read())
@@ -19,6 +20,7 @@ def main():
         dcos = DCOS(stack)
         dcos.process_stack()
         dcos.check_login()
+
 
 class DCOS:
     def __init__(self, settings):
@@ -144,7 +146,7 @@ class DCOS:
             headers=headers,
             json={'password': password, 'description': description}
         )
-        if r.status_code >= 200 and r.status_code < 300:
+        if 200 <= r.status_code < 300:
             log.debug("user {} created successfully".format(login))
             return True
         else:
@@ -164,7 +166,7 @@ class DCOS:
             url,
             headers=headers
         )
-        if r.status_code >= 200 and r.status_code < 300:
+        if 200 <= r.status_code < 300:
             log.debug("user {} deleted successfully".format(login))
             return True
         else:
@@ -184,7 +186,7 @@ class DCOS:
             url,
             headers=headers
         )
-        if r.status_code >= 200 and r.status_code < 300:
+        if 200 <= r.status_code < 300:
             log.debug("user {} successfully added to group {}".format(login, group))
             return True
         else:
@@ -201,7 +203,7 @@ class DCOS:
             headers=self.default_headers,
             json={'uid': login, 'password': password}
         )
-        if r.status_code >= 200 and r.status_code < 300:
+        if 200 <= r.status_code < 300:
             log.debug("authentication succeeded for user {}".format(login))
             return {'Authorization': 'token=%s' % r.json()['token']}
         else:
