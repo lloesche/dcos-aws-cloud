@@ -14,6 +14,13 @@ log = logging.getLogger(__name__)
 
 
 def main():
+    """Entry point
+
+    Loads the file stacks.yaml and processes all the defined stacks.
+    Processing means it either creates or updates the stack to match it's specification.
+    After that it checks that the default bootstrap user no longer exists and that the
+    admin user has been created.
+    """
     log.debug("reading stacks.yaml")
     stacks = yaml.load(open('stacks.yaml').read())
     for stack in stacks:
@@ -23,7 +30,13 @@ def main():
 
 
 class DCOS:
+    """Represents an AWS DCOS stack"""
     def __init__(self, settings):
+        """Constructor
+
+        :rtype: DCOS
+        :param settings: A single stack dict (usually read from the stacks.yaml file)
+        """
         self.settings = settings
         self.log = logging.getLogger(self.__class__.__name__)
         self.adminurl_scheme = 'http://'
@@ -31,6 +44,7 @@ class DCOS:
         self.cf = boto3.resource('cloudformation', region_name=self.settings['Region'])
 
     def process_stack(self):
+        """Try to create or update the stack"""
         defaults = {
             'TimeoutInMinutes': 240,
             'Capabilities': ['CAPABILITY_IAM'],
@@ -84,10 +98,16 @@ class DCOS:
             stack = self.cf.Stack(stack.name)
             log.info("stack {} has status {}".format(stack.name, stack.stack_status))
 
-    def outputs(self, name):
+    def outputs(self, key):
+        """Iterates over the stack outputs and returns the value matching the provided key
+
+        :rtype: str
+        :param key: The OutputKey name e.g. DnsAddress or PublicSlaveDnsAddress
+        :return: The key value as str or None
+        """
         stack = self.cf.Stack(self.settings['StackName'])
         for output in stack.outputs:
-            if output['OutputKey'] == name:
+            if output['OutputKey'] == key:
                 return self.adminurl_scheme + output['OutputValue']
 
         return None
@@ -101,22 +121,23 @@ class DCOS:
         return self.outputs('PublicSlaveDnsAddress')
 
     def check_login(self):
-        # request with json in the body
-        # Content-Type: application/json; charset=utf-8
-        #
-        # requests expecting non empty body
-        # Accept: application/json
-        # Accept-Charset: utf-8
+        """Test if the configured admin account can authenticate.
 
+        If not create it. Also test if the default bootstrap user exists and if so delete it.
+        """
         dcos_auth = DCOSAuth(self.adminurl, self.settings['Admin'], self.settings['AdminPassword'], 'Admin')
         admin_exists = dcos_auth.set_auth_header()
 
-        if dcos_auth.test_default_login():
+        if dcos_auth.default_login_works:
             log.info("default login worked, removing it")
             if admin_exists:
                 log.info("admin user exists, only deleting default user")
             else:
-                dcos_auth.auth_header = dcos_auth.default_login_auth_header()
+                # Since the admin user doesn't exist but we were able to authenticate
+                # using the default login request an authentication token and
+                # explicitly set the object's auth_header to it.
+                dcos_auth.auth_header = dcos_auth.default_login_auth_header
+
                 log.info("admin user doesn't exist, creating it before deleting default user")
                 dcos_auth.create_user(self.settings['Admin'], self.settings['AdminPassword'], 'Admin')
                 dcos_auth.add_user_to_group(self.settings['Admin'], 'superusers')
@@ -127,6 +148,7 @@ class DCOS:
                 log.info("default user doesn't exist but admin user doesn't work either - manual intervention required")
             else:
                 log.info("default user doesn't exist and admin user works - everything looking good")
+
 # add default user back for testing purposes
 #        dcos_auth.create_user(dcos_auth.default_login['login'], dcos_auth.default_login['password'], 'Super User')
 #        dcos_auth.add_user_to_group(dcos_auth.default_login['login'], 'superusers')
@@ -134,6 +156,14 @@ class DCOS:
 
 class DCOSAuth:
     def __init__(self, adminurl, login=None, password=None, description=None):
+        """Constructor
+
+        :rtype: DCOSAuth
+        :param adminurl: The DCOS UI url
+        :param login:
+        :param password:
+        :param description:
+        """
         self.adminurl = adminurl
         self.login = login
         self.password = password
@@ -142,15 +172,35 @@ class DCOSAuth:
         self.default_login = {'login': 'bootstrapuser', 'password': 'deleteme'}
         self.auth_header = None
 
-    def test_default_login(self):
-        return True if self.default_login_auth_header() else False
+    @property
+    def default_login_works(self):
+        """Tests if the default login works.
 
+        :rtype: bool
+        :return: True or False
+        """
+        return True if self.default_login_auth_header else False
+
+    @property
     def default_login_auth_header(self):
+        """Requests a DCOS authentication token header using default credentials
+
+        :rtype: dict or None
+        :return: authentication header dict or None
+        """
         return self.get_auth_header(self.default_login['login'], self.default_login['password'])
 
     def create_user(self, login, password, description):
+        """Create a user
+
+        :rtype: bool
+        :param login: The user's login
+        :param password: The user's password
+        :param description: The user's full name
+        :return: True on success
+        """
         return self.request('put',
-                            '/acs/api/v1/users/{}'.format(login),
+                            '/users/{}'.format(login),
                             json={'password': password,
                                   'description': description
                                   },
@@ -158,19 +208,52 @@ class DCOSAuth:
                             )
 
     def delete_user(self, login):
+        """Delete a user
+
+        :rtype: bool
+        :param login: The user's login
+        :return: True on success
+        """
         return self.request('delete',
-                            '/acs/api/v1/users/{}'.format(login),
+                            '/users/{}'.format(login),
                             msg='deleting user {}'.format(login)
                             )
 
     def add_user_to_group(self, login, group):
+        """Add a user to a group
+
+        :rtype: bool
+        :param login: The user's login
+        :param group: The group to add the user to
+        :return: True on success
+        """
         return self.request('put',
-                            '/acs/api/v1/groups/{}/users/{}'.format(group, login),
+                            '/groups/{}/users/{}'.format(group, login),
                             msg='adding user {} to group {}'.format(login, group)
                             )
 
     def request(self, method, path, msg=None, json=None, retfmt='bool', errorfatal=True, autoauth=True):
-        url = self.adminurl + path
+        # request with json in the body
+        # Content-Type: application/json; charset=utf-8
+        #
+        # requests expecting non empty body
+        # Accept: application/json
+        # Accept-Charset: utf-8
+        """Send a http request to the DCOS authentication service
+
+        :rtype: complex
+        :param method: HTTP method to use (get, post, put, delete)
+        :param path: The API path to send the request to
+        :param msg: An optional log message
+        :param json: Optional JSON data to be transmitted with the request
+        :param retfmt: Return format (default=bool, json, request)
+                       json will return the r.json() data
+                       request will return the entire r object
+        :param errorfatal: If True throw exception on error
+        :param autoauth: Try to automatically acquire an auth token
+        :return: depends on retfmt
+        """
+        url = self.adminurl + '/acs/api/v1' + path
 
         if msg:
             log.info(msg)
@@ -219,8 +302,15 @@ class DCOSAuth:
                     return None
 
     def get_auth_header(self, login, password):
+        """Try to acquire a DCOS authentication token
+
+        :rtype: dict or None
+        :param login: Login to use
+        :param password: Password to use
+        :return: A header dict with the token or None
+        """
         json = self.request('post',
-                            '/acs/api/v1/auth/login',
+                            '/auth/login',
                             json={'uid': login, 'password': password},
                             msg='authenticating at {} with user {}'.format(self.adminurl, login),
                             errorfatal=False,
@@ -233,6 +323,11 @@ class DCOSAuth:
             return None
 
     def set_auth_header(self):
+        """Set the objects authentication header by requesting an auth token
+
+        :rtype: bool
+        :return: True or False
+        """
         self.auth_header = self.get_auth_header(self.login, self.password)
         return True if self.auth_header else False
 
