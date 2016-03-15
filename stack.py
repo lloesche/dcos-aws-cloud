@@ -28,7 +28,6 @@ class DCOS:
         self.log = logging.getLogger(self.__class__.__name__)
         self.adminurl_scheme = 'http://'
         self.auth_header = None
-        self.default_headers = {'Accept': 'application/json', 'Accept-Charset': 'utf-8'}
         self.cf = boto3.resource('cloudformation', region_name=self.settings['Region'])
 
     def process_stack(self):
@@ -109,34 +108,49 @@ class DCOS:
         # Accept: application/json
         # Accept-Charset: utf-8
 
-        auth_header = self.get_auth_header(self.settings['Admin'], self.settings['AdminPassword'])
+        dcos_auth = DCOSAuth(self.adminurl, self.settings['Admin'], self.settings['AdminPassword'], 'Admin')
+        admin_exists = dcos_auth.set_auth_header()
 
-        if self.default_login():
+        if dcos_auth.test_default_login():
             log.info("default login worked, removing it")
-            if auth_header:
-                log.info("stack admin user exists, only deleting default user")
-                self.auth_header = auth_header
+            if admin_exists:
+                log.info("admin user exists, only deleting default user")
             else:
-                log.info("stack admin user doesn't exist, creating it before deleting default user")
-                self.create_user(self.settings['Admin'], self.settings['AdminPassword'], 'Admin')
-                self.add_user_to_group(self.settings['Admin'], 'superusers')
+                dcos_auth.auth_header = dcos_auth.default_login_auth_header()
+                log.info("admin user doesn't exist, creating it before deleting default user")
+                dcos_auth.create_user(self.settings['Admin'], self.settings['AdminPassword'], 'Admin')
+                dcos_auth.add_user_to_group(self.settings['Admin'], 'superusers')
 
-            self.delete_user('bootstrapuser')
+            dcos_auth.delete_user(dcos_auth.default_login['login'])
         else:
-            if not auth_header:
+            if not admin_exists:
                 log.info("default user doesn't exist but admin user doesn't work either - manual intervention required")
             else:
                 log.info("default user doesn't exist and admin user works - everything looking good")
 
-    def default_login(self):
-        defaults = {'login': 'bootstrapuser', 'password': 'deleteme'}
-        self.auth_header = self.get_auth_header(defaults['login'], defaults['password'])
 
-        return True if self.auth_header else False
+class DCOSAuth:
+    def __init__(self, adminurl, login=None, password=None, description=None):
+        self.adminurl = adminurl
+        self.login = login
+        self.password = password
+        self.description = description
+        self.default_headers = {'Accept': 'application/json', 'Accept-Charset': 'utf-8'}
+        self.default_login = {'login': 'bootstrapuser', 'password': 'deleteme'}
+        self.auth_header = None
+
+    def test_default_login(self):
+        return True if self.default_login_auth_header() else False
+
+    def default_login_auth_header(self):
+        return self.get_auth_header(self.default_login['login'], self.default_login['password'])
 
     def create_user(self, login, password, description):
+        if not self.auth_header:
+            self.set_auth_header()
+
         url = self.adminurl + '/acs/api/v1/users/' + login
-        log.info("trying to create user {}".format(login))
+        log.info("creating user {}".format(login))
 
         headers = self.default_headers.copy()
         headers.update(self.auth_header)
@@ -150,14 +164,20 @@ class DCOS:
             log.debug("user {} created successfully".format(login))
             return True
         else:
-            resp = r.json()['code'] if r.json() else r.text
+            if r.headers['Content-Type'] and r.headers['Content-Type'] == 'application/json':
+                resp = r.json()['code']
+            else:
+                resp = r.reason
             msg = "failed to create user {}: {}".format(login, resp)
             log.debug(msg)
             raise Exception(msg)
 
     def delete_user(self, login):
+        if not self.auth_header:
+            self.set_auth_header()
+
         url = self.adminurl + '/acs/api/v1/users/' + login
-        log.info("trying to delete user {}".format(login))
+        log.info("deleting user {}".format(login))
 
         headers = self.default_headers.copy()
         headers.update(self.auth_header)
@@ -170,14 +190,20 @@ class DCOS:
             log.debug("user {} deleted successfully".format(login))
             return True
         else:
-            resp = r.json()['code'] if r.json() else r.text
-            msg = "failed to create user {}: {}".format(login, resp)
+            if r.headers['Content-Type'] and r.headers['Content-Type'] == 'application/json':
+                resp = r.json()['code']
+            else:
+                resp = r.reason
+            msg = "failed to delete user {}: {}".format(login, resp)
             log.debug(msg)
             raise Exception(msg)
 
     def add_user_to_group(self, login, group):
+        if not self.auth_header:
+            self.set_auth_header()
+
         url = "{}/acs/api/v1/groups/{}/users/{}".format(self.adminurl, group, login)
-        log.info("trying to add user {} to group {}".format(login, group))
+        log.info("adding user {} to group {}".format(login, group))
 
         headers = self.default_headers.copy()
         headers.update(self.auth_header)
@@ -190,14 +216,17 @@ class DCOS:
             log.debug("user {} successfully added to group {}".format(login, group))
             return True
         else:
-            resp = r.json()['code'] if r.json() else r.text
+            if r.headers['Content-Type'] and r.headers['Content-Type'] == 'application/json':
+                resp = r.json()['code']
+            else:
+                resp = r.reason
             msg = "failed to add user {} to group {}: {}".format(login, group, resp)
             log.debug(msg)
             raise Exception(msg)
 
     def get_auth_header(self, login, password):
         url = self.adminurl + '/acs/api/v1/auth/login'
-        log.debug("trying to authenticate at {} with user {}".format(url, login))
+        log.debug("authenticating at {} with user {}".format(url, login))
         r = requests.post(
             url,
             headers=self.default_headers,
@@ -207,9 +236,16 @@ class DCOS:
             log.debug("authentication succeeded for user {}".format(login))
             return {'Authorization': 'token=%s' % r.json()['token']}
         else:
-            resp = r.json()['code'] if r.headers['Content-Type'] == 'application/json' else r.text
+            if r.headers['Content-Type'] and r.headers['Content-Type'] == 'application/json':
+                resp = r.json()['code']
+            else:
+                resp = r.reason
             msg = "authentication failed for user {}: {}".format(login, resp)
             log.debug(msg)
             return None
+
+    def set_auth_header(self):
+        self.auth_header = self.get_auth_header(self.login, self.password)
+        return True if self.auth_header else False
 
 main()
