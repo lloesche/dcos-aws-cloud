@@ -101,7 +101,7 @@ class DCOS:
     def outputs(self, key):
         """Iterates over the stack outputs and returns the value matching the provided key
 
-        :rtype: str
+        :rtype: Union[str, None]
         :param key: The OutputKey name e.g. DnsAddress or PublicSlaveDnsAddress
         :return: The key value as str or None
         """
@@ -114,10 +114,20 @@ class DCOS:
 
     @property
     def adminurl(self):
+        """The Public Agent DNS address
+
+        :rtype: str
+        :return: A string of the public agent DNS address
+        """
         return self.outputs('DnsAddress')
 
     @property
     def pubagturl(self):
+        """The Public Agent DNS address
+
+        :rtype: str
+        :return: A string of the public agent DNS address
+        """
         return self.outputs('PublicSlaveDnsAddress')
 
     def check_login(self):
@@ -188,7 +198,7 @@ class DCOSAuth:
     def default_login_auth_header(self):
         """Requests a DCOS authentication token header using default credentials
 
-        :rtype: dict or None
+        :rtype: Union[dict, None]
         :return: authentication header dict or None
         """
         return self.get_auth_header(self.default_login['login'], self.default_login['password'])
@@ -244,7 +254,7 @@ class DCOSAuth:
         # Accept-Charset: utf-8
         """Send a http request to the DCOS authentication service
 
-        :rtype: complex
+        :rtype: Union[bool, object, dict, None]
         :param method: HTTP method to use (get, post, put, delete)
         :param path: The API path to send the request to
         :param msg: An optional log message
@@ -307,7 +317,7 @@ class DCOSAuth:
     def get_auth_header(self, login, password):
         """Try to acquire a DCOS authentication token
 
-        :rtype: dict or None
+        :rtype: Union[dict, None]
         :param login: Login to use
         :param password: Password to use
         :return: A header dict with the token or None
