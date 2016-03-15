@@ -127,6 +127,9 @@ class DCOS:
                 log.info("default user doesn't exist but admin user doesn't work either - manual intervention required")
             else:
                 log.info("default user doesn't exist and admin user works - everything looking good")
+# add default user back for testing purposes
+#        dcos_auth.create_user(dcos_auth.default_login['login'], dcos_auth.default_login['password'], 'Super User')
+#        dcos_auth.add_user_to_group(dcos_auth.default_login['login'], 'superusers')
 
 
 class DCOSAuth:
@@ -146,102 +149,87 @@ class DCOSAuth:
         return self.get_auth_header(self.default_login['login'], self.default_login['password'])
 
     def create_user(self, login, password, description):
-        if not self.auth_header:
-            self.set_auth_header()
-
-        url = self.adminurl + '/acs/api/v1/users/' + login
-        log.info("creating user {}".format(login))
-
-        headers = self.default_headers.copy()
-        headers.update(self.auth_header)
-
-        r = requests.put(
-            url,
-            headers=headers,
-            json={'password': password, 'description': description}
-        )
-        if 200 <= r.status_code < 300:
-            log.debug("user {} created successfully".format(login))
-            return True
-        else:
-            if r.headers['Content-Type'] and r.headers['Content-Type'] == 'application/json':
-                resp = r.json()['code']
-            else:
-                resp = r.reason
-            msg = "failed to create user {}: {}".format(login, resp)
-            log.debug(msg)
-            raise Exception(msg)
+        return self.request('put',
+                            '/acs/api/v1/users/{}'.format(login),
+                            json={'password': password,
+                                  'description': description
+                                  },
+                            msg='creating user {}'.format(login)
+                            )
 
     def delete_user(self, login):
-        if not self.auth_header:
-            self.set_auth_header()
-
-        url = self.adminurl + '/acs/api/v1/users/' + login
-        log.info("deleting user {}".format(login))
-
-        headers = self.default_headers.copy()
-        headers.update(self.auth_header)
-
-        r = requests.delete(
-            url,
-            headers=headers
-        )
-        if 200 <= r.status_code < 300:
-            log.debug("user {} deleted successfully".format(login))
-            return True
-        else:
-            if r.headers['Content-Type'] and r.headers['Content-Type'] == 'application/json':
-                resp = r.json()['code']
-            else:
-                resp = r.reason
-            msg = "failed to delete user {}: {}".format(login, resp)
-            log.debug(msg)
-            raise Exception(msg)
+        return self.request('delete',
+                            '/acs/api/v1/users/{}'.format(login),
+                            msg='deleting user {}'.format(login)
+                            )
 
     def add_user_to_group(self, login, group):
-        if not self.auth_header:
-            self.set_auth_header()
+        return self.request('put',
+                            '/acs/api/v1/groups/{}/users/{}'.format(group, login),
+                            msg='adding user {} to group {}'.format(login, group)
+                            )
 
-        url = "{}/acs/api/v1/groups/{}/users/{}".format(self.adminurl, group, login)
-        log.info("adding user {} to group {}".format(login, group))
+    def request(self, method, path, msg=None, json=None, retfmt='bool', errorfatal=True, autoauth=True):
+        url = self.adminurl + path
+
+        if msg:
+            log.info(msg)
 
         headers = self.default_headers.copy()
-        headers.update(self.auth_header)
 
-        r = requests.put(
-            url,
-            headers=headers
-        )
+        if not self.auth_header and autoauth:
+            self.set_auth_header()
+
+        if self.auth_header:
+            headers.update(self.auth_header)
+
+        if method == 'get':
+            r = requests.get(url, headers=headers, json=json)
+        elif method == 'post':
+            r = requests.post(url, headers=headers, json=json)
+        elif method == 'put':
+            r = requests.put(url, headers=headers, json=json)
+        elif method == 'delete':
+            r = requests.delete(url, headers=headers, json=json)
+
         if 200 <= r.status_code < 300:
-            log.debug("user {} successfully added to group {}".format(login, group))
-            return True
+            log.debug("success")
+            if retfmt == 'json':
+                log.debug('returning json')
+                return r.json()
+            elif retfmt == 'request':
+                log.debug('returning request object')
+                return r
+            else:
+                return True
         else:
             if r.headers['Content-Type'] and r.headers['Content-Type'] == 'application/json':
                 resp = r.json()['code']
             else:
                 resp = r.reason
-            msg = "failed to add user {} to group {}: {}".format(login, group, resp)
+            msg = "failed: {}".format(resp)
             log.debug(msg)
-            raise Exception(msg)
+            if errorfatal:
+                raise Exception(msg)
+            else:
+                if retfmt == 'request':
+                    log.debug('returning request object')
+                    return r
+                else:
+                    return None
 
     def get_auth_header(self, login, password):
-        url = self.adminurl + '/acs/api/v1/auth/login'
-        log.debug("authenticating at {} with user {}".format(url, login))
-        r = requests.post(
-            url,
-            headers=self.default_headers,
-            json={'uid': login, 'password': password}
-        )
-        if 200 <= r.status_code < 300:
-            log.debug("authentication succeeded for user {}".format(login))
-            return {'Authorization': 'token=%s' % r.json()['token']}
+        json = self.request('post',
+                            '/acs/api/v1/auth/login',
+                            json={'uid': login, 'password': password},
+                            msg='authenticating at {} with user {}'.format(self.adminurl, login),
+                            errorfatal=False,
+                            retfmt='json',
+                            autoauth=False
+                            )
+        if json:
+            return {'Authorization': 'token=%s' % json['token']}
         else:
-            if r.headers['Content-Type'] and r.headers['Content-Type'] == 'application/json':
-                resp = r.json()['code']
-            else:
-                resp = r.reason
-            msg = "authentication failed for user {}: {}".format(login, resp)
-            log.debug(msg)
             return None
 
     def set_auth_header(self):
