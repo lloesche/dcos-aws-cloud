@@ -5,6 +5,7 @@ import yaml
 import botocore.exceptions
 import logging
 import requests
+from pprint import pprint
 import sys
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 
@@ -41,7 +42,7 @@ class DCOS:
         :rtype: DCOS
         :param settings: A single stack dict (usually read from the stacks.yaml file)
         """
-        self.settings = settings
+        self.settings = self.format_settings(settings)
         self.log = logging.getLogger(self.__class__.__name__)
         self.adminurl_scheme = 'https://'
         self.auth_header = None
@@ -108,6 +109,21 @@ class DCOS:
             time.sleep(5)
             stack = self.cf.Stack(stack.name)
             log.info("stack {} has status {}".format(stack.name, stack.stack_status))
+
+    def format_settings(self, settings):
+        """Turn the settings input format into something the boto3 CF API understands
+
+        :rtype: dict
+        :param settings: Dict of the stack settings
+        :return: Dict with stack settings resolved for boto3 processing
+        """
+        log.debug("parsing settings")
+        np = []
+        for k, v in settings['Parameters'].items():
+            log.debug("processing k, v {}, {}".format(k, v))
+            np.append({'ParameterKey': k, 'ParameterValue': v})
+        settings['Parameters'] = np
+        return settings
 
     def preprocess(self):
         """Iterate over the stack ParameterValues and try to resolve any placeholders
