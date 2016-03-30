@@ -3,15 +3,25 @@
   Region: eu-central-1
   Admin: admin
   AdminPassword: pC7VknRGGr7jAM
-  TemplateURL: https://s3.amazonaws.com/downloads.mesosphere.io/dcos/testing/continuous/commit/1cd6cdba6b662721620ed6960603ab8e5c576ac5/cloudformation/ee.multi-master.cloudformation.json
+  TemplateURL: https://s3.amazonaws.com/downloads.mesosphere.io/dcos/testing/continuous/cloudformation/ee.zen-3.json
   Parameters:
   - ParameterKey: AcceptEULA
     ParameterValue: 'Yes'
   - ParameterKey: KeyName
     ParameterValue: default
-  - ParameterKey: AdminLocation
-    ParameterValue: 0.0.0.0/0
-  - ParameterKey: PublicSlaveInstanceCount
-    ParameterValue: '1'
-  - ParameterKey: SlaveInstanceCount
+  - ParameterKey: InternetGateway
+    ParameterValue: '@stack.DCOSBaseNetwork.resources.InternetGateway@'
+  - ParameterKey: PrivateAgentInstanceCount
     ParameterValue: '3'
+  - ParameterKey: PrivateAgentInstanceType
+    ParameterValue: m3.xlarge
+  - ParameterKey: PrivateSubnet
+    ParameterValue: '@stack.DCOSBaseNetwork.resources.PrivateSubnet@'
+  - ParameterKey: PublicAgentInstanceCount
+    ParameterValue: '3'
+  - ParameterKey: PublicAgentInstanceType
+    ParameterValue: m3.xlarge
+  - ParameterKey: PublicSubnet
+    ParameterValue: '@stack.DCOSBaseNetwork.resources.PublicSubnet@'
+  - ParameterKey: Vpc
+    ParameterValue: '@stack.DCOSBaseNetwork.resources.Vpc@'

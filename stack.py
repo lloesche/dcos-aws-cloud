@@ -5,6 +5,7 @@ import yaml
 import botocore.exceptions
 import logging
 import requests
+import sys
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
@@ -45,15 +46,21 @@ class DCOS:
         self.adminurl_scheme = 'https://'
         self.auth_header = None
         self.cf = boto3.resource('cloudformation', region_name=self.settings['Region'])
+        self.cfc = boto3.client('cloudformation', region_name=self.settings['Region'])
+        self.preprocessed = False
 
     def process_stack(self):
         """Try to create or update the stack"""
         defaults = {
             'TimeoutInMinutes': 240,
             'Capabilities': ['CAPABILITY_IAM'],
-            'Tags': [{'Key': 'author', 'Value': 'autoinstaller'}]
+            'Tags': [{'Key': 'Author', 'Value': 'aws-dcos-install'}]
         }
         wait = False
+
+        if not self.preprocessed:
+            self.preprocess()
+
         stackdef = defaults.copy()
         stackdef.update(self.settings)
         log.info("processing stack {}".format(stackdef['StackName']))
@@ -76,7 +83,7 @@ class DCOS:
                 try:
                     stack = self.cf.Stack(stackdef['StackName'])
                     log.info("stack {} has status {}".format(stack.name, stack.stack_status))
-                    if stack.stack_status in ['CREATE_COMPLETE', 'UPDATE_COMPLETE']:
+                    if not stack.stack_status.endswith('_IN_PROGRESS'):
                         log.debug("trying to update stack {}".format(stackdef['StackName']))
                         stack.update(
                             StackName=stackdef['StackName'],
@@ -87,7 +94,8 @@ class DCOS:
                         )
                         wait = True
                     else:
-                        log.info("stack {} is busy ({}) - retry again later".format(stack.name, stack.stack_status))
+                        log.info("stack {} is busy ({}) - waiting".format(stack.name, stack.stack_status))
+                        wait = True
                 except botocore.exceptions.ClientError as e:
                     if e.response['Error']['Code'] == 'ValidationError':
                         log.info("nothing to update for stack {}".format(stack.name))
@@ -96,22 +104,87 @@ class DCOS:
             else:
                 log.warning(e)
 
-        while wait and stack.stack_status not in ['CREATE_COMPLETE', 'UPDATE_COMPLETE']:
+        while wait and stack.stack_status.endswith('_IN_PROGRESS'):
             time.sleep(5)
             stack = self.cf.Stack(stack.name)
             log.info("stack {} has status {}".format(stack.name, stack.stack_status))
 
-    def outputs(self, key):
+    def preprocess(self):
+        """Iterate over the stack ParameterValues and try to resolve any placeholders
+
+        """
+        for p in self.settings['Parameters']:
+            log.debug("found parameter {} with value {}".format(p['ParameterKey'], p['ParameterValue']))
+            if p['ParameterValue'].startswith('@') and p['ParameterValue'].endswith('@'):
+                log.debug("trying to process {}".format(p['ParameterKey']))
+                p['ParameterValue'] = self.resolve(p['ParameterValue'])
+                log.debug("new value of {} is {}".format(p['ParameterKey'], p['ParameterValue']))
+
+        self.preprocessed = True
+
+    def resolve(self, value):
+        """Resolves placeholders with their actual value.
+        E.g. input @stack.DCOSBaseNetwork.resources.Vpc@ and return vpc-d54e02bc
+
+        :rtype: Union[str, None]
+        :param value: ParameterValue of a CloudFormation Stack configuration
+        :return: The resolved value
+        """
+        value = value[1:-1].split('.')  # remove leading and trailing @
+        system = value[0]
+        if system == 'stack':
+            stack_name = value[1]
+            action = value[2]
+            if action == 'resources':
+                logical_id = value[3]
+                return self.resources(stack_name, logical_id)
+            elif action == 'outputs':
+                key = value[3]
+                return self.outputs(stack_name, key)
+
+        return None
+
+    def outputs(self, stack_name, key):
         """Iterates over the stack outputs and returns the value matching the provided key
 
         :rtype: Union[str, None]
+        :param stack_name: A CloudFormation stack name
         :param key: The OutputKey name e.g. DnsAddress or PublicSlaveDnsAddress
         :return: The key value as str or None if the key wasn't found
         """
-        stack = self.cf.Stack(self.settings['StackName'])
+        log.debug("searching for output value of key {} in stack {}".format(key, stack_name))
+        stack = self.cf.Stack(stack_name)
         for output in stack.outputs:
+            log.debug("found output {}".format(output))
             if output['OutputKey'] == key:
-                return self.adminurl_scheme + output['OutputValue']
+                log.debug("returning match {}".format(output['OutputValue']))
+                return output['OutputValue']
+
+        return None
+
+    def resources(self, stack_name, logical_id, next_token=None):
+        """Return a Stack's Physical Resource ID based of a Logical Resource ID
+
+        :rtype: Union[str, None]
+        :param stack_name: A CloudFormation stack name
+        :param logical_id: The logical resource ID to search for
+        :param next_token: Used internally by the boto3 CF stack resources pagination
+        :return: The physical resource ID as str or None if the logical resource id wasn't found
+        """
+        log.debug("searching for logical resource id {} in stack {}".format(logical_id, stack_name))
+        if next_token:
+            stack_resources = self.cfc.list_stack_resources(StackName=stack_name, NextToken=next_token)
+        else:
+            stack_resources = self.cfc.list_stack_resources(StackName=stack_name)
+
+        for resource in stack_resources['StackResourceSummaries']:
+            log.debug("found resource {}".format(resource))
+            if resource['LogicalResourceId'] == logical_id:
+                log.debug("returning match {}".format(resource['PhysicalResourceId']))
+                return resource['PhysicalResourceId']
+
+        if stack_resources['NextToken']:
+            return self.resources(stack_name, logical_id, stack_resources['NextToken'])
 
         return None
 
@@ -122,7 +195,7 @@ class DCOS:
         :rtype: str
         :return: A string of the public agent DNS address
         """
-        return self.outputs('DnsAddress')
+        return self.adminurl_scheme + self.outputs(self.settings['StackName'], 'DnsAddress')
 
     @property
     def pubagturl(self):
@@ -131,7 +204,7 @@ class DCOS:
         :rtype: str
         :return: A string of the public agent DNS address
         """
-        return self.outputs('PublicSlaveDnsAddress')
+        return self.adminurl_scheme + self.outputs(self.settings['StackName'], 'PublicSlaveDnsAddress')
 
     def check_login(self):
         """Test if the configured admin account can authenticate.
