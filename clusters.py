@@ -74,11 +74,11 @@ class DCOSStack:
 
         stackdef = defaults.copy()
         stackdef.update(self.settings)
-        log.info("processing stack {}".format(stackdef['StackName']))
+        self.log.info("processing stack {}".format(stackdef['StackName']))
 
 
         try:
-            log.debug("trying to create stack {}".format(stackdef['StackName']))
+            self.log.debug("trying to create stack {}".format(stackdef['StackName']))
             stack = self.cf.create_stack(
                 StackName=stackdef['StackName'],
                 TemplateURL=stackdef['TemplateURL'],
@@ -90,12 +90,12 @@ class DCOSStack:
             wait = True
         except botocore.exceptions.ClientError as e:
             if e.response['Error']['Code'] == 'AlreadyExistsException':
-                log.debug("stack {} already exists".format(stackdef['StackName']))
+                self.log.debug("stack {} already exists".format(stackdef['StackName']))
                 try:
                     stack = self.cf.Stack(stackdef['StackName'])
-                    log.info("stack {} has status {}".format(stack.name, stack.stack_status))
+                    self.log.info("stack {} has status {}".format(stack.name, stack.stack_status))
                     if not stack.stack_status.endswith('_IN_PROGRESS'):
-                        log.debug("trying to update stack {}".format(stackdef['StackName']))
+                        self.log.debug("trying to update stack {}".format(stackdef['StackName']))
                         stack.update(
                             StackName=stackdef['StackName'],
                             TemplateURL=stackdef['TemplateURL'],
@@ -105,20 +105,20 @@ class DCOSStack:
                         )
                         wait = True
                     else:
-                        log.info("stack {} is busy ({}) - waiting".format(stack.name, stack.stack_status))
+                        self.log.info("stack {} is busy ({}) - waiting".format(stack.name, stack.stack_status))
                         wait = True
                 except botocore.exceptions.ClientError as e:
                     if e.response['Error']['Code'] == 'ValidationError':
-                        log.info("nothing to update for stack {}".format(stack.name))
+                        self.log.info("nothing to update for stack {}".format(stack.name))
                     else:
-                        log.warning(e)
+                        self.log.warning(e)
             else:
-                log.warning(e)
+                self.log.warning(e)
 
         while wait and stack.stack_status.endswith('_IN_PROGRESS'):
             time.sleep(5)
             stack = self.cf.Stack(stack.name)
-            log.info("stack {} has status {}".format(stack.name, stack.stack_status))
+            self.log.info("stack {} has status {}".format(stack.name, stack.stack_status))
 
     def format_settings(self, settings):
         """Turn the settings input format into something the boto3 CF API understands
@@ -127,10 +127,10 @@ class DCOSStack:
         :param settings: Dict of the stack settings
         :return: Dict with stack settings resolved for boto3 processing
         """
-        log.debug("parsing settings")
+        self.log.debug("parsing settings")
         np = []
         for k, v in settings['Parameters'].items():
-            log.debug("processing k, v {}, {}".format(k, v))
+            self.log.debug("processing k, v {}, {}".format(k, v))
             np.append({'ParameterKey': k, 'ParameterValue': v})
         settings['Parameters'] = np
         return settings
@@ -140,11 +140,11 @@ class DCOSStack:
 
         """
         for p in self.settings['Parameters']:
-            log.debug("found parameter {} with value {}".format(p['ParameterKey'], p['ParameterValue']))
+            self.log.debug("found parameter {} with value {}".format(p['ParameterKey'], p['ParameterValue']))
             if p['ParameterValue'].startswith('@') and p['ParameterValue'].endswith('@'):
-                log.debug("trying to process {}".format(p['ParameterKey']))
+                self.log.debug("trying to process {}".format(p['ParameterKey']))
                 p['ParameterValue'] = self.resolve(p['ParameterValue'])
-                log.debug("new value of {} is {}".format(p['ParameterKey'], p['ParameterValue']))
+                self.log.debug("new value of {} is {}".format(p['ParameterKey'], p['ParameterValue']))
 
         self.preprocessed = True
 
@@ -189,13 +189,13 @@ class DCOSStack:
         if not region_name:
             region_name = self.settings['Region']
 
-        log.debug("searching for output value of key {} in stack {} ({})".format(key, stack_name, region_name))
+        self.log.debug("searching for output value of key {} in stack {} ({})".format(key, stack_name, region_name))
         cf = boto3.resource('cloudformation', region_name=region_name)
         stack = cf.Stack(stack_name)
         for output in stack.outputs:
-            log.debug("found output {}".format(output))
+            self.log.debug("found output {}".format(output))
             if output['OutputKey'] == key:
-                log.debug("returning match {}".format(output['OutputValue']))
+                self.log.debug("returning match {}".format(output['OutputValue']))
                 return output['OutputValue']
 
         return None
@@ -213,7 +213,7 @@ class DCOSStack:
         if not region_name:
             region_name = self.settings['Region']
 
-        log.debug("searching for logical resource id {} in stack {} ({})".format(logical_id, stack_name, region_name))
+        self.log.debug("searching for logical resource id {} in stack {} ({})".format(logical_id, stack_name, region_name))
         cfc = boto3.client('cloudformation', region_name=region_name)
         if next_token:
             stack_resources = cfc.list_stack_resources(StackName=stack_name, NextToken=next_token)
@@ -221,9 +221,9 @@ class DCOSStack:
             stack_resources = cfc.list_stack_resources(StackName=stack_name)
 
         for resource in stack_resources['StackResourceSummaries']:
-            log.debug("found resource {}".format(resource))
+            self.log.debug("found resource {}".format(resource))
             if resource['LogicalResourceId'] == logical_id:
-                log.debug("returning match {}".format(resource['PhysicalResourceId']))
+                self.log.debug("returning match {}".format(resource['PhysicalResourceId']))
                 return resource['PhysicalResourceId']
 
         if stack_resources['NextToken']:
@@ -287,6 +287,7 @@ class DCOSAuth:
         self.default_headers = {'Accept': 'application/json', 'Accept-Charset': 'utf-8'}
         self.default_login = {'login': 'bootstrapuser', 'password': 'deleteme'}
         self.auth_header = None
+        self.log = logging.getLogger(self.__class__.__name__)
 
     @property
     def default_login_works(self):
@@ -373,7 +374,7 @@ class DCOSAuth:
         url = self.admin_url + '/acs/api/v1' + path
 
         if msg:
-            log.info(msg)
+            self.log.info(msg)
 
         headers = self.default_headers.copy()
 
@@ -393,12 +394,12 @@ class DCOSAuth:
             r = requests.delete(url, headers=headers, json=json, verify=verify)
 
         if 200 <= r.status_code < 300:
-            log.debug("success")
+            self.log.debug("success")
             if retfmt == 'json':
-                log.debug('returning json')
+                self.log.debug('returning json')
                 return r.json()
             elif retfmt == 'request':
-                log.debug('returning request object')
+                self.log.debug('returning request object')
                 return r
             else:
                 return True
@@ -408,12 +409,12 @@ class DCOSAuth:
             else:
                 resp = r.reason
             msg = "failed: {}".format(resp)
-            log.debug(msg)
+            self.log.debug(msg)
             if errorfatal:
                 raise Exception(msg)
             else:
                 if retfmt == 'request':
-                    log.debug('returning request object')
+                    self.log.debug('returning request object')
                     return r
                 else:
                     return None
@@ -456,28 +457,28 @@ class DCOSAuth:
         admin_exists = self.set_auth_header()
 
         if self.default_login_works:
-            log.info("default login worked, removing it")
+            self.log.info("default login worked, removing it")
             if admin_exists:
-                log.info("admin user exists, only deleting default user")
+                self.log.info("admin user exists, only deleting default user")
             else:
                 # Since the admin user doesn't exist but we were able to authenticate
                 # using the default login request an authentication token and
                 # explicitly set the object's auth_header to it.
                 self.auth_header = self.default_login_auth_header
 
-                log.info("admin user doesn't exist, creating it before deleting default user")
+                self.log.info("admin user doesn't exist, creating it before deleting default user")
                 self.create_user(self.login, self.password, self.description)
                 self.add_user_to_group(self.login, 'superusers')
 
             self.delete_user(self.default_login['login'])
         else:
             if not admin_exists:
-                log.info("default user doesn't exist but admin user doesn't work either - manual intervention required")
+                self.log.info("default user doesn't exist but admin user doesn't work either - manual intervention required")
             else:
-                log.info("default user doesn't exist and admin user works - everything looking good")
+                self.log.info("default user doesn't exist and admin user works - everything looking good")
 
 # add default user back for testing purposes
-#        log.debug("WARNING: ADDING DEFAULT USER BACK FOR DEVELOPMENT")
+#        self.log.debug("WARNING: ADDING DEFAULT USER BACK FOR DEVELOPMENT")
 #        self.create_user(self.default_login['login'], self.default_login['password'], 'Super User')
 #        self.add_user_to_group(self.default_login['login'], 'superusers')
 
