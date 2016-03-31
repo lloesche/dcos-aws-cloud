@@ -5,9 +5,9 @@ import yaml
 import botocore.exceptions
 import logging
 import requests
-from pprint import pprint
 import sys
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
+#from pprint import pprint
 
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
@@ -26,8 +26,12 @@ def main():
     After that it checks that the default bootstrap user no longer exists and that the
     admin user has been created.
     """
-    log.debug("reading stacks.yaml")
-    clusters = yaml.load(open('clusters.yaml').read())
+    if len(sys.argv) > 1:
+        clusters_file = sys.argv[1]
+    else:
+        clusters_file = 'clusters.yaml'
+    log.debug("reading {}".format(clusters_file))
+    clusters = yaml.load(open(clusters_file).read())
     adminurl = None
     for cluster in clusters:
         for stack in cluster['Stacks']:

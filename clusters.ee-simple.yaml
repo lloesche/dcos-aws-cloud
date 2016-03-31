@@ -1,0 +1,14 @@
+---
+- ClusterName: dcos-simple
+  Admin: admin
+  AdminPassword: pC7VknRGGr7jAM
+  Stacks:
+  - StackName: DCOSSimple
+    Region: eu-central-1
+    TemplateURL: https://s3.amazonaws.com/downloads.mesosphere.io/dcos/testing/continuous/cloudformation/ee.multi-master.cloudformation.json
+    Parameters:
+      AcceptEULA: 'Yes'
+      AdminLocation: '0.0.0.0/0'
+      KeyName: 'default'
+      SlaveInstanceCount: '5'
+      PublicSlaveInstanceCount: '1'

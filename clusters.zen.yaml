@@ -1,0 +1,19 @@
+---
+- ClusterName: dcos-zen
+  Admin: admin
+  AdminPassword: pC7VknRGGr7jAM
+  Stacks:
+  - StackName: DCOSZen
+    Region: eu-central-1
+    TemplateURL: https://s3.amazonaws.com/downloads.mesosphere.io/dcos/testing/continuous/cloudformation/ee.zen-3.json
+    Parameters:
+      AcceptEULA: 'Yes'
+      KeyName: 'default'
+      InternetGateway: '@stack.DCOSBaseNetwork.resources.InternetGateway@'
+      PrivateAgentInstanceCount: '3'
+      PrivateAgentInstanceType: 'm3.xlarge'
+      PrivateSubnet: '@stack.DCOSBaseNetwork.resources.PrivateSubnet@'
+      PublicAgentInstanceCount: '3'
+      PublicAgentInstanceType: 'm3.xlarge'
+      PublicSubnet: '@stack.DCOSBaseNetwork.resources.PublicSubnet@'
+      Vpc: '@stack.DCOSBaseNetwork.resources.Vpc@'
