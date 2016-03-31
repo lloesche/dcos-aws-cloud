@@ -12,8 +12,9 @@ from requests.packages.urllib3.exceptions import InsecureRequestWarning
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
-logging.getLogger('DCOS').setLevel(logging.DEBUG)
 logging.getLogger('__main__').setLevel(logging.DEBUG)
+logging.getLogger('DCOSStack').setLevel(logging.DEBUG)
+logging.getLogger('DCOSAuth').setLevel(logging.DEBUG)
 #logging.getLogger('requests').setLevel(logging.DEBUG)
 log = logging.getLogger(__name__)
 
@@ -50,11 +51,11 @@ class DCOSStack:
     def __init__(self, settings):
         """Constructor
 
-        :rtype: DCOS
+        :rtype: DCOSStack
         :param settings: A single stack dict (usually read from the stacks.yaml file)
         """
-        self.settings = self.format_settings(settings)
         self.log = logging.getLogger(self.__class__.__name__)
+        self.settings = self.format_settings(settings)
         self.admin_url_scheme = 'https://'
         self.auth_header = None
         self.cf = boto3.resource('cloudformation', region_name=self.settings['Region'])
