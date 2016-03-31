@@ -34,7 +34,7 @@
     Parameters:
       InternalMasterLoadBalancerDnsName: '@stack.DCOSMaster.outputs.InternalMasterLoadBalancerDnsName@'
       KeyName: 'default'
-      PrivateAgentInstanceCount: '3'
+      PrivateAgentInstanceCount: '5'
       PrivateAgentInstanceType: 'm3.xlarge'
       PrivateAgentSecurityGroup: '@stack.DCOSInfra.resources.PrivateAgentSecurityGroup@'
       PrivateSubnet: '@stack.DCOSBaseNetwork.resources.PrivateSubnet@'

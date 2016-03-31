@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 def main():
     """Entry point
 
-    Loads the file stacks.yaml and processes all the defined stacks.
+    Loads the file clusters.yaml and processes all the defined cluster stacks.
     Processing means it either creates or updates the stack to match it's specification.
     After that it checks that the default bootstrap user no longer exists and that the
     admin user has been created.
@@ -32,16 +32,16 @@ def main():
         clusters_file = 'clusters.yaml'
     log.debug("reading {}".format(clusters_file))
     clusters = yaml.load(open(clusters_file).read())
-    adminurl = None
+    admin_url = None
     for cluster in clusters:
         for stack in cluster['Stacks']:
-            dcos = DCOSStack(stack)
-            dcos.process_stack()
+            dcos_stack = DCOSStack(stack)
+            dcos_stack.process_stack()
 
-            if not adminurl:
-                adminurl = dcos.adminurl
+            if not admin_url:
+                admin_url = dcos_stack.admin_url
 
-        dcos_auth = DCOSAuth(adminurl, cluster['Admin'], cluster['AdminPassword'], 'Admin')
+        dcos_auth = DCOSAuth(admin_url, cluster['Admin'], cluster['AdminPassword'], 'Admin')
         dcos_auth.check_login()
 
 
@@ -55,7 +55,7 @@ class DCOSStack:
         """
         self.settings = self.format_settings(settings)
         self.log = logging.getLogger(self.__class__.__name__)
-        self.adminurl_scheme = 'https://'
+        self.admin_url_scheme = 'https://'
         self.auth_header = None
         self.cf = boto3.resource('cloudformation', region_name=self.settings['Region'])
         self.preprocessed = False
@@ -232,15 +232,15 @@ class DCOSStack:
         return None
 
     @property
-    def adminurl(self):
+    def admin_url(self):
         """The Master ELB DNS address
 
         :rtype: Union[str, None]
         :return: A string of the public agent DNS address
         """
-        adminurl = self.first_output_value(['DnsAddress', 'MasterDNSName', 'OutputFromNestedStack'])
-        if adminurl:
-            return self.adminurl_scheme + adminurl
+        admin_url = self.first_output_value(['DnsAddress', 'MasterDNSName', 'OutputFromNestedStack'])
+        if admin_url:
+            return self.admin_url_scheme + admin_url
 
         return None
 
@@ -271,16 +271,16 @@ class DCOSAuth:
     """Used to acquire a DCOS authentication token to make requests to other DCOS components.
     Can also create and delete users and assign them to groups.
     """
-    def __init__(self, adminurl, login=None, password=None, description=None):
+    def __init__(self, admin_url, login=None, password=None, description=None):
         """Constructor
 
         :rtype: DCOSAuth
-        :param adminurl: The DCOS UI url
+        :param admin_url: The DCOS UI url
         :param login:
         :param password:
         :param description:
         """
-        self.adminurl = adminurl
+        self.admin_url = admin_url
         self.login = login
         self.password = password
         self.description = description
@@ -362,7 +362,7 @@ class DCOSAuth:
         :param path: The API path to send the request to
         :param msg: An optional log message
         :param json: Optional JSON data to be transmitted with the request
-        :param verify: Bool verify SSL certificate when using https adminurl
+        :param verify: Bool verify SSL certificate when using https admin_url
         :param retfmt: Return format (default=bool, json, request)
                        json will return the r.json() data
                        request will return the entire r object
@@ -370,7 +370,7 @@ class DCOSAuth:
         :param autoauth: Try to automatically acquire an auth token
         :return: depends on retfmt
         """
-        url = self.adminurl + '/acs/api/v1' + path
+        url = self.admin_url + '/acs/api/v1' + path
 
         if msg:
             log.info(msg)
@@ -429,7 +429,7 @@ class DCOSAuth:
         json = self.request('post',
                             '/auth/login',
                             json={'uid': login, 'password': password},
-                            msg='authenticating at {} with user {}'.format(self.adminurl, login),
+                            msg='authenticating at {} with user {}'.format(self.admin_url, login),
                             errorfatal=False,
                             retfmt='json',
                             autoauth=False
