@@ -27,14 +27,21 @@ def main():
     admin user has been created.
     """
     log.debug("reading stacks.yaml")
-    stacks = yaml.load(open('stacks.yaml').read())
-    for stack in stacks:
-        dcos = DCOS(stack)
-        dcos.process_stack()
-        dcos.check_login()
+    clusters = yaml.load(open('clusters.yaml').read())
+    adminurl = None
+    for cluster in clusters:
+        for stack in cluster['Stacks']:
+            dcos = DCOSStack(stack)
+            dcos.process_stack()
+
+            if not adminurl:
+                adminurl = dcos.adminurl
+
+        dcos_auth = DCOSAuth(adminurl, cluster['Admin'], cluster['AdminPassword'], 'Admin')
+        dcos_auth.check_login()
 
 
-class DCOS:
+class DCOSStack:
     """Represents an AWS DCOS stack"""
     def __init__(self, settings):
         """Constructor
@@ -47,7 +54,6 @@ class DCOS:
         self.adminurl_scheme = 'https://'
         self.auth_header = None
         self.cf = boto3.resource('cloudformation', region_name=self.settings['Region'])
-        self.cfc = boto3.client('cloudformation', region_name=self.settings['Region'])
         self.preprocessed = False
 
     def process_stack(self):
@@ -138,38 +144,50 @@ class DCOS:
 
         self.preprocessed = True
 
-    def resolve(self, value):
+    def resolve(self, v):
         """Resolves placeholders with their actual value.
         E.g. input @stack.DCOSBaseNetwork.resources.Vpc@ and return vpc-d54e02bc
 
         :rtype: Union[str, None]
-        :param value: ParameterValue of a CloudFormation Stack configuration
+        :param v: ParameterValue of a CloudFormation Stack configuration
         :return: The resolved value
         """
-        value = value[1:-1].split('.')  # remove leading and trailing @
-        system = value[0]
+        v = v[1:-1].split('.')  # remove leading and trailing @
+        system = v.pop(0)
         if system == 'stack':
-            stack_name = value[1]
-            action = value[2]
+            stack_name = v.pop(0)
+
+            action = v.pop(0)
+            if action == 'region':
+                region_name = v.pop(0)
+                action = v.pop(0)
+            else:
+                region_name = self.settings['Region']
+
             if action == 'resources':
-                logical_id = value[3]
-                return self.resources(stack_name, logical_id)
+                logical_id = v.pop(0)
+                return self.resources(stack_name, logical_id, region_name)
             elif action == 'outputs':
-                key = value[3]
-                return self.outputs(stack_name, key)
+                key = v.pop(0)
+                return self.outputs(stack_name, key, region_name)
 
         return None
 
-    def outputs(self, stack_name, key):
+    def outputs(self, stack_name, key, region_name=None):
         """Iterates over the stack outputs and returns the value matching the provided key
 
         :rtype: Union[str, None]
         :param stack_name: A CloudFormation stack name
         :param key: The OutputKey name e.g. DnsAddress or PublicSlaveDnsAddress
+        :param region_name: Name of the AWS Region
         :return: The key value as str or None if the key wasn't found
         """
-        log.debug("searching for output value of key {} in stack {}".format(key, stack_name))
-        stack = self.cf.Stack(stack_name)
+        if not region_name:
+            region_name = self.settings['Region']
+
+        log.debug("searching for output value of key {} in stack {} ({})".format(key, stack_name, region_name))
+        cf = boto3.resource('cloudformation', region_name=region_name)
+        stack = cf.Stack(stack_name)
         for output in stack.outputs:
             log.debug("found output {}".format(output))
             if output['OutputKey'] == key:
@@ -178,20 +196,25 @@ class DCOS:
 
         return None
 
-    def resources(self, stack_name, logical_id, next_token=None):
+    def resources(self, stack_name, logical_id, region_name=None, next_token=None):
         """Return a Stack's Physical Resource ID based of a Logical Resource ID
 
         :rtype: Union[str, None]
         :param stack_name: A CloudFormation stack name
         :param logical_id: The logical resource ID to search for
         :param next_token: Used internally by the boto3 CF stack resources pagination
+        :param region_name: Name of the AWS Region
         :return: The physical resource ID as str or None if the logical resource id wasn't found
         """
-        log.debug("searching for logical resource id {} in stack {}".format(logical_id, stack_name))
+        if not region_name:
+            region_name = self.settings['Region']
+
+        log.debug("searching for logical resource id {} in stack {} ({})".format(logical_id, stack_name, region_name))
+        cfc = boto3.client('cloudformation', region_name=region_name)
         if next_token:
-            stack_resources = self.cfc.list_stack_resources(StackName=stack_name, NextToken=next_token)
+            stack_resources = cfc.list_stack_resources(StackName=stack_name, NextToken=next_token)
         else:
-            stack_resources = self.cfc.list_stack_resources(StackName=stack_name)
+            stack_resources = cfc.list_stack_resources(StackName=stack_name)
 
         for resource in stack_resources['StackResourceSummaries']:
             log.debug("found resource {}".format(resource))
@@ -200,60 +223,44 @@ class DCOS:
                 return resource['PhysicalResourceId']
 
         if stack_resources['NextToken']:
-            return self.resources(stack_name, logical_id, stack_resources['NextToken'])
+            return self.resources(stack_name, logical_id, region_name, stack_resources['NextToken'])
 
         return None
 
     @property
     def adminurl(self):
-        """The Public Agent DNS address
+        """The Master ELB DNS address
 
-        :rtype: str
+        :rtype: Union[str, None]
         :return: A string of the public agent DNS address
         """
-        return self.adminurl_scheme + self.outputs(self.settings['StackName'], 'DnsAddress')
+        adminurl = self.first_output_value(['DnsAddress', 'MasterDNSName', 'OutputFromNestedStack'])
+        if adminurl:
+            return self.adminurl_scheme + adminurl
+
+        return None
 
     @property
-    def pubagturl(self):
+    def pubagtaddr(self):
         """The Public Agent DNS address
 
-        :rtype: str
+        :rtype: Union[str, None]
         :return: A string of the public agent DNS address
         """
-        return self.adminurl_scheme + self.outputs(self.settings['StackName'], 'PublicSlaveDnsAddress')
+        return self.first_output_value(['PublicSlaveDnsAddress', 'PublicAgentDNSName'])
 
-    def check_login(self):
-        """Test if the configured admin account can authenticate.
+    def first_output_value(self, keys):
+        """Returns the first value found for a list of stack output keys
 
-        If not create it. Also test if the default bootstrap user exists and if so delete it.
+        :param keys: A list of output keys
+        :return: A string with the first value found
         """
-        dcos_auth = DCOSAuth(self.adminurl, self.settings['Admin'], self.settings['AdminPassword'], 'Admin')
-        admin_exists = dcos_auth.set_auth_header()
+        for key in keys:
+            value = self.outputs(self.settings['StackName'], key)
+            if value:
+                return value
 
-        if dcos_auth.default_login_works:
-            log.info("default login worked, removing it")
-            if admin_exists:
-                log.info("admin user exists, only deleting default user")
-            else:
-                # Since the admin user doesn't exist but we were able to authenticate
-                # using the default login request an authentication token and
-                # explicitly set the object's auth_header to it.
-                dcos_auth.auth_header = dcos_auth.default_login_auth_header
-
-                log.info("admin user doesn't exist, creating it before deleting default user")
-                dcos_auth.create_user(self.settings['Admin'], self.settings['AdminPassword'], 'Admin')
-                dcos_auth.add_user_to_group(self.settings['Admin'], 'superusers')
-
-            dcos_auth.delete_user(dcos_auth.default_login['login'])
-        else:
-            if not admin_exists:
-                log.info("default user doesn't exist but admin user doesn't work either - manual intervention required")
-            else:
-                log.info("default user doesn't exist and admin user works - everything looking good")
-
-# add default user back for testing purposes
-#        dcos_auth.create_user(dcos_auth.default_login['login'], dcos_auth.default_login['password'], 'Super User')
-#        dcos_auth.add_user_to_group(dcos_auth.default_login['login'], 'superusers')
+        return None
 
 
 class DCOSAuth:
@@ -436,5 +443,38 @@ class DCOSAuth:
         """
         self.auth_header = self.get_auth_header(self.login, self.password)
         return True if self.auth_header else False
+
+    def check_login(self):
+        """Test if the configured admin account can authenticate.
+
+        If not create it. Also test if the default bootstrap user exists and if so delete it.
+        """
+        admin_exists = self.set_auth_header()
+
+        if self.default_login_works:
+            log.info("default login worked, removing it")
+            if admin_exists:
+                log.info("admin user exists, only deleting default user")
+            else:
+                # Since the admin user doesn't exist but we were able to authenticate
+                # using the default login request an authentication token and
+                # explicitly set the object's auth_header to it.
+                self.auth_header = self.default_login_auth_header
+
+                log.info("admin user doesn't exist, creating it before deleting default user")
+                self.create_user(self.login, self.password, self.description)
+                self.add_user_to_group(self.login, 'superusers')
+
+            self.delete_user(self.default_login['login'])
+        else:
+            if not admin_exists:
+                log.info("default user doesn't exist but admin user doesn't work either - manual intervention required")
+            else:
+                log.info("default user doesn't exist and admin user works - everything looking good")
+
+# add default user back for testing purposes
+#        log.debug("WARNING: ADDING DEFAULT USER BACK FOR DEVELOPMENT")
+#        self.create_user(self.default_login['login'], self.default_login['password'], 'Super User')
+#        self.add_user_to_group(self.default_login['login'], 'superusers')
 
 main()
