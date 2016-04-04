@@ -2,6 +2,12 @@
 - ClusterName: dcos-simple
   Admin: admin
   AdminPassword: pC7VknRGGr7jAM
+  DNS:
+    MasterAlias:
+      - dcos.test.mesosphere.com
+    PubAgentAlias:
+      - servicea.test.mesosphere.com
+      - serviceb.test.mesosphere.com
   Stacks:
   - StackName: DCOSSimple
     Region: eu-central-1
@@ -10,5 +16,5 @@
       AcceptEULA: 'Yes'
       AdminLocation: '0.0.0.0/0'
       KeyName: 'default'
-      SlaveInstanceCount: '5'
-      PublicSlaveInstanceCount: '1'
+      SlaveInstanceCount: 5
+      PublicSlaveInstanceCount: 1

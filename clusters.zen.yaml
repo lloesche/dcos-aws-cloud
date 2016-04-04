@@ -2,6 +2,12 @@
 - ClusterName: dcos-zen
   Admin: admin
   AdminPassword: pC7VknRGGr7jAM
+  DNS:
+    MasterAlias:
+      - dcos.test.mesosphere.com
+    PubAgentAlias:
+      - servicea.test.mesosphere.com
+      - serviceb.test.mesosphere.com
   Stacks:
   - StackName: DCOSZen
     Region: eu-central-1
@@ -10,10 +16,10 @@
       AcceptEULA: 'Yes'
       KeyName: 'default'
       InternetGateway: '@stack.DCOSBaseNetwork.resources.InternetGateway@'
-      PrivateAgentInstanceCount: '3'
+      PrivateAgentInstanceCount: 3
       PrivateAgentInstanceType: 'm3.xlarge'
       PrivateSubnet: '@stack.DCOSBaseNetwork.resources.PrivateSubnet@'
-      PublicAgentInstanceCount: '3'
+      PublicAgentInstanceCount: 3
       PublicAgentInstanceType: 'm3.xlarge'
       PublicSubnet: '@stack.DCOSBaseNetwork.resources.PublicSubnet@'
       Vpc: '@stack.DCOSBaseNetwork.resources.Vpc@'

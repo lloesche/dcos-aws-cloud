@@ -2,6 +2,12 @@
 - ClusterName: dcos
   Admin: admin
   AdminPassword: pC7VknRGGr7jAM
+  DNS:
+    MasterAlias:
+      - dcos.test.mesosphere.com
+    PubAgentAlias:
+      - servicea.test.mesosphere.com
+      - serviceb.test.mesosphere.com
   Stacks:
   - StackName: DCOSInfra
     Region: eu-central-1
@@ -34,7 +40,7 @@
     Parameters:
       InternalMasterLoadBalancerDnsName: '@stack.DCOSMaster.outputs.InternalMasterLoadBalancerDnsName@'
       KeyName: 'default'
-      PrivateAgentInstanceCount: '5'
+      PrivateAgentInstanceCount: 5
       PrivateAgentInstanceType: 'm3.xlarge'
       PrivateAgentSecurityGroup: '@stack.DCOSInfra.resources.PrivateAgentSecurityGroup@'
       PrivateSubnet: '@stack.DCOSBaseNetwork.resources.PrivateSubnet@'
@@ -44,7 +50,7 @@
     Parameters:
       InternalMasterLoadBalancerDnsName: '@stack.DCOSMaster.outputs.InternalMasterLoadBalancerDnsName@'
       KeyName: 'default'
-      PublicAgentInstanceCount: '2'
+      PublicAgentInstanceCount: 2
       PublicAgentInstanceType: 'm3.xlarge'
       PublicAgentSecurityGroup: '@stack.DCOSInfra.resources.PublicAgentSecurityGroup@'
       PublicSubnet: '@stack.DCOSBaseNetwork.resources.PublicSubnet@'

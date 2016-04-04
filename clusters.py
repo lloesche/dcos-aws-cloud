@@ -11,12 +11,13 @@ from pprint import pprint
 
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
-logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
-logging.getLogger('__main__').setLevel(logging.DEBUG)
-logging.getLogger('DCOSStack').setLevel(logging.DEBUG)
-logging.getLogger('DCOSAuth').setLevel(logging.DEBUG)
-logging.getLogger('DNSAlias').setLevel(logging.DEBUG)
-#logging.getLogger('requests').setLevel(logging.DEBUG)
+log_level = logging.INFO
+logging.basicConfig(level=logging.WARN, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.getLogger('__main__').setLevel(log_level)
+logging.getLogger('DCOSStack').setLevel(log_level)
+logging.getLogger('DCOSAuth').setLevel(log_level)
+logging.getLogger('DNSAlias').setLevel(log_level)
+logging.getLogger('requests').setLevel(log_level)
 log = logging.getLogger(__name__)
 
 
@@ -37,8 +38,6 @@ def main():
 
     admin_addr = None
     pubagt_addr = None
-    admin_elb = None
-    pubagt_elb = None
     dns_alias = DNSAlias()
 
     for cluster in clusters:
@@ -55,10 +54,11 @@ def main():
             dcos_auth = DCOSAuth('https://' + admin_addr, cluster['Admin'], cluster['AdminPassword'], 'Admin')
             dcos_auth.check_login()
 
-        if admin_addr:
-            dns_alias.create(cluster['DNS']['MasterAlias'], admin_addr)
-        if pubagt_addr:
-            dns_alias.create(cluster['DNS']['PubAgentAlias'], pubagt_addr)
+        if cluster['DNS']:
+            if admin_addr and cluster['DNS']['MasterAlias']:
+                dns_alias.create(cluster['DNS']['MasterAlias'], admin_addr)
+            if pubagt_addr and cluster['DNS']['PubAgentAlias']:
+                dns_alias.create(cluster['DNS']['PubAgentAlias'], pubagt_addr)
 
 
 class DNSAlias:
@@ -82,7 +82,7 @@ class DNSAlias:
         :param hostnames: list or string of the DNS alias to create
         :param target: DNS name the hostname(s) should point to
         """
-        if type(hostnames) is list:
+        if isinstance(hostnames, list):
             for hostname in hostnames:
                 self.create_cname(hostname, target)
         else:
@@ -96,7 +96,7 @@ class DNSAlias:
         :param target: String the CNAME should point to
         :return:
         """
-        self.log.info('trying to create CNAME from {} to {}'.format(hostname, target))
+        self.log.info('creating CNAME from {} to {}'.format(hostname, target))
         if hostname in self.blacklist:
             self.log.warn('hostname {} is blacklisted'.format(hostname))
             return False
@@ -126,7 +126,7 @@ class DNSAlias:
                 ]
             })
         if r:
-            self.log.info("submitted change request with ID {} status is {}".format(r['ChangeInfo']['Id'], r['ChangeInfo']['Status']))
+            self.log.debug("submitted change request with ID {} status is {}".format(r['ChangeInfo']['Id'], r['ChangeInfo']['Status']))
             return True
         else:
             return False
@@ -147,7 +147,7 @@ class DNSAlias:
 
         :rtype: None
         """
-        self.log.info('refreshing list of zones')
+        self.log.debug('refreshing list of zones')
         complete = False
         next_marker = None
         zones = []
@@ -175,7 +175,7 @@ class DNSAlias:
         :param fuzzy: bool whether to match the exact hostname or just the end of it
         :return:
         """
-        self.log.info('searching for zone ID of {}'.format(hostname))
+        self.log.debug('searching for zone ID of {}'.format(hostname))
         if not hostname.endswith('.'):
             hostname += '.'
         for z in self.zones:
@@ -276,7 +276,7 @@ class DCOSStack:
         np = []
         for k, v in settings['Parameters'].items():
             self.log.debug("processing k, v {}, {}".format(k, v))
-            np.append({'ParameterKey': k, 'ParameterValue': v})
+            np.append({'ParameterKey': k, 'ParameterValue': str(v)})
         settings['Parameters'] = np
         return settings
 
@@ -338,7 +338,7 @@ class DCOSStack:
         cf = boto3.resource('cloudformation', region_name=region_name)
         stack = cf.Stack(stack_name)
         if not stack.outputs:
-            self.log.info("stack {} doesn't have any outputs".format(stack_name))
+            self.log.debug("stack {} doesn't have any outputs".format(stack_name))
             return None
 
         for output in stack.outputs:
