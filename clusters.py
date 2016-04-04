@@ -7,7 +7,7 @@ import logging
 import requests
 import sys
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
-#from pprint import pprint
+from pprint import pprint
 
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
@@ -15,6 +15,7 @@ logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s -
 logging.getLogger('__main__').setLevel(logging.DEBUG)
 logging.getLogger('DCOSStack').setLevel(logging.DEBUG)
 logging.getLogger('DCOSAuth').setLevel(logging.DEBUG)
+logging.getLogger('DNSAlias').setLevel(logging.DEBUG)
 #logging.getLogger('requests').setLevel(logging.DEBUG)
 log = logging.getLogger(__name__)
 
@@ -33,17 +34,160 @@ def main():
         clusters_file = 'clusters.yaml'
     log.debug("reading {}".format(clusters_file))
     clusters = yaml.load(open(clusters_file).read())
-    admin_url = None
+
+    admin_addr = None
+    pubagt_addr = None
+    admin_elb = None
+    pubagt_elb = None
+    dns_alias = DNSAlias()
+
     for cluster in clusters:
         for stack in cluster['Stacks']:
             dcos_stack = DCOSStack(stack)
             dcos_stack.process_stack()
 
-            if not admin_url:
-                admin_url = dcos_stack.admin_url
+            if not admin_addr:
+                admin_addr = dcos_stack.admin_addr
+            if not pubagt_addr:
+                pubagt_addr = dcos_stack.pubagt_addr
 
-        dcos_auth = DCOSAuth(admin_url, cluster['Admin'], cluster['AdminPassword'], 'Admin')
-        dcos_auth.check_login()
+        if admin_addr:
+            dcos_auth = DCOSAuth('https://' + admin_addr, cluster['Admin'], cluster['AdminPassword'], 'Admin')
+            dcos_auth.check_login()
+
+        if admin_addr:
+            dns_alias.create(cluster['DNS']['MasterAlias'], admin_addr)
+        if pubagt_addr:
+            dns_alias.create(cluster['DNS']['PubAgentAlias'], pubagt_addr)
+
+
+class DNSAlias:
+    """Create a DNS CNAME"""
+    def __init__(self):
+        self.log = logging.getLogger(self.__class__.__name__)
+        self.r53 = boto3.client('route53')
+        self.hosted_zones = []
+        self.blacklist = ['mesosphere.com',
+                          'mesosphere.io',
+                          'downloads.mesosphere.io',
+                          'repos.mesosphere.com',
+                          'docs.mesosphere.com',
+                          'open.mesosphere.com'
+                          ]
+
+    def create(self, hostnames, target):
+        """Create a DNS alias (CNAME or Alias)
+
+        :rtype: None
+        :param hostnames: list or string of the DNS alias to create
+        :param target: DNS name the hostname(s) should point to
+        """
+        if type(hostnames) is list:
+            for hostname in hostnames:
+                self.create_cname(hostname, target)
+        else:
+            self.create_cname(hostnames, target)
+
+    def create_cname(self, hostname, target):
+        """Create a CNAME
+
+        :rtype: bool
+        :param hostname: Hostname to create a CNAME for
+        :param target: String the CNAME should point to
+        :return:
+        """
+        self.log.info('trying to create CNAME from {} to {}'.format(hostname, target))
+        if hostname in self.blacklist:
+            self.log.warn('hostname {} is blacklisted'.format(hostname))
+            return False
+
+        src_zone_id = self.zone_id(hostname)
+        if not src_zone_id:
+            self.log.warn("hostname {} is not in a R53 hosted zone".format(hostname))
+            return False
+
+        r = self.r53.change_resource_record_sets(
+            HostedZoneId=src_zone_id,
+            ChangeBatch={
+                'Changes': [
+                    {
+                        'Action': 'UPSERT',
+                        'ResourceRecordSet': {
+                            'Name': hostname,
+                            'Type': 'CNAME',
+                            'TTL': 300,
+                            'ResourceRecords': [
+                                {
+                                    'Value': target
+                                }
+                            ]
+                        }
+                    }
+                ]
+            })
+        if r:
+            self.log.info("submitted change request with ID {} status is {}".format(r['ChangeInfo']['Id'], r['ChangeInfo']['Status']))
+            return True
+        else:
+            return False
+
+    @property
+    def zones(self):
+        """Return the list of R53 hosted zones
+
+        :rtype: list
+        :return: List of zones
+        """
+        if len(self.hosted_zones) < 1:
+            self.fetch_zones()
+        return self.hosted_zones
+
+    def fetch_zones(self):
+        """Fetch the list of R53 hosted zones
+
+        :rtype: None
+        """
+        self.log.info('refreshing list of zones')
+        complete = False
+        next_marker = None
+        zones = []
+
+        while not complete:
+            if next_marker:
+                hz = self.r53.list_hosted_zones(Marker=next_marker)
+            else:
+                hz = self.r53.list_hosted_zones()
+
+            zones.extend(hz['HostedZones'])
+
+            if hz['IsTruncated']:
+                next_marker = hz['NextMarker']
+            else:
+                complete = True
+
+        self.hosted_zones = zones  # swap the list
+
+    def zone_id(self, hostname, fuzzy=True):
+        """Returns the R53 zone id of a given hostname
+
+        :rtype: Union[str, None]
+        :param hostname: DNS name for which to find the R53 zone ID
+        :param fuzzy: bool whether to match the exact hostname or just the end of it
+        :return:
+        """
+        self.log.info('searching for zone ID of {}'.format(hostname))
+        if not hostname.endswith('.'):
+            hostname += '.'
+        for z in self.zones:
+            if fuzzy:
+                if hostname.endswith(z['Name']):
+                    self.log.debug('zone {} with id {} is a match for {}'.format(z['Name'], z['Id'], hostname))
+                    return z['Id']
+            else:
+                if hostname == z['Name']:
+                    self.log.debug('zone {} with id {} is a match for {}'.format(z['Name'], z['Id'], hostname))
+                    return z['Id']
+        self.log.debug('no matching zone found for {}'.format(hostname))
 
 
 class DCOSStack:
@@ -171,7 +315,7 @@ class DCOSStack:
 
             if action == 'resources':
                 logical_id = v.pop(0)
-                return self.resources(stack_name, logical_id, region_name)
+                return self.resources(logical_id, stack_name, region_name)
             elif action == 'outputs':
                 key = v.pop(0)
                 return self.outputs(stack_name, key, region_name)
@@ -193,6 +337,10 @@ class DCOSStack:
         self.log.debug("searching for output value of key {} in stack {} ({})".format(key, stack_name, region_name))
         cf = boto3.resource('cloudformation', region_name=region_name)
         stack = cf.Stack(stack_name)
+        if not stack.outputs:
+            self.log.info("stack {} doesn't have any outputs".format(stack_name))
+            return None
+
         for output in stack.outputs:
             self.log.debug("found output {}".format(output))
             if output['OutputKey'] == key:
@@ -201,7 +349,7 @@ class DCOSStack:
 
         return None
 
-    def resources(self, stack_name, logical_id, region_name=None, next_token=None):
+    def resources(self, logical_id, stack_name=None, region_name=None, next_token=None):
         """Return a Stack's Physical Resource ID based of a Logical Resource ID
 
         :rtype: Union[str, None]
@@ -211,6 +359,8 @@ class DCOSStack:
         :param region_name: Name of the AWS Region
         :return: The physical resource ID as str or None if the logical resource id wasn't found
         """
+        if not stack_name:
+            stack_name = self.settings['StackName']
         if not region_name:
             region_name = self.settings['Region']
 
@@ -227,26 +377,23 @@ class DCOSStack:
                 self.log.debug("returning match {}".format(resource['PhysicalResourceId']))
                 return resource['PhysicalResourceId']
 
-        if stack_resources['NextToken']:
-            return self.resources(stack_name, logical_id, region_name, stack_resources['NextToken'])
+        if 'NextToken' in stack_resources:
+            return self.resources(logical_id, stack_name, region_name, stack_resources['NextToken'])
 
+        self.log.warn('did not find resource {}'.format(logical_id))
         return None
 
     @property
-    def admin_url(self):
+    def admin_addr(self):
         """The Master ELB DNS address
 
         :rtype: Union[str, None]
         :return: A string of the public agent DNS address
         """
-        admin_url = self.first_output_value(['DnsAddress', 'MasterDNSName', 'OutputFromNestedStack'])
-        if admin_url:
-            return self.admin_url_scheme + admin_url
-
-        return None
+        return self.first_output_value(['DnsAddress', 'MasterDNSName', 'OutputFromNestedStack'])
 
     @property
-    def pubagtaddr(self):
+    def pubagt_addr(self):
         """The Public Agent DNS address
 
         :rtype: Union[str, None]
@@ -350,13 +497,7 @@ class DCOSAuth:
                             msg='adding user {} to group {}'.format(login, group)
                             )
 
-    def request(self, method, path, msg=None, json=None, retfmt='bool', errorfatal=True, autoauth=True, verify=False):
-        # request with json in the body
-        # Content-Type: application/json; charset=utf-8
-        #
-        # requests expecting non empty body
-        # Accept: application/json
-        # Accept-Charset: utf-8
+    def request(self, method, path, msg=None, json=None, retfmt='bool', errorfatal=True, autoauth=True, verify_ssl=False):
         """Send a http request to the DCOS authentication service
 
         :rtype: Union[bool, object, dict, None]
@@ -364,7 +505,7 @@ class DCOSAuth:
         :param path: The API path to send the request to
         :param msg: An optional log message
         :param json: Optional JSON data to be transmitted with the request
-        :param verify: Bool verify SSL certificate when using https admin_url
+        :param verify_ssl: Bool verify SSL certificate when using https admin_url
         :param retfmt: Return format (default=bool, json, request)
                        json will return the r.json() data
                        request will return the entire r object
@@ -386,13 +527,13 @@ class DCOSAuth:
             headers.update(self.auth_header)
 
         if method == 'get':
-            r = requests.get(url, headers=headers, json=json, verify=verify)
+            r = requests.get(url, headers=headers, json=json, verify=verify_ssl)
         elif method == 'post':
-            r = requests.post(url, headers=headers, json=json, verify=verify)
+            r = requests.post(url, headers=headers, json=json, verify=verify_ssl)
         elif method == 'put':
-            r = requests.put(url, headers=headers, json=json, verify=verify)
+            r = requests.put(url, headers=headers, json=json, verify=verify_ssl)
         elif method == 'delete':
-            r = requests.delete(url, headers=headers, json=json, verify=verify)
+            r = requests.delete(url, headers=headers, json=json, verify=verify_ssl)
 
         if 200 <= r.status_code < 300:
             self.log.debug("success")
@@ -405,7 +546,7 @@ class DCOSAuth:
             else:
                 return True
         else:
-            if r.headers['Content-Type'] and r.headers['Content-Type'] == 'application/json':
+            if 'Content-Type' in r.headers and r.headers['Content-Type'] == 'application/json':
                 resp = r.json()['code']
             else:
                 resp = r.reason
