@@ -1,2 +1,4 @@
 parsedatetime
 boto3
+pyyaml
+requests
