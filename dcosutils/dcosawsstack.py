@@ -4,12 +4,12 @@ import boto3
 import botocore.exceptions
 
 
-class DCOSStack:
+class DCOSAWSStack:
     """Represents an AWS DCOS stack"""
     def __init__(self, settings):
         """Constructor
 
-        :rtype: DCOSStack
+        :rtype: DCOSAWSStack
         :param settings: A single stack dict (usually read from the stacks.yaml file)
         """
         self.log = logging.getLogger(self.__class__.__name__)

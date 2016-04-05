@@ -3,16 +3,16 @@ import sys
 import logging
 import yaml
 from dcosutils.dcosauth import DCOSAuth
-from dcosutils.dcosawsstack import DCOSStack
+from dcosutils.dcosawsstack import DCOSAWSStack
 from dcosutils.dcosdnsalias import DCOSDNSAlias
 
 
 log_level = logging.DEBUG
 logging.basicConfig(level=logging.WARN, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.getLogger('__main__').setLevel(log_level)
-logging.getLogger('DCOSStack').setLevel(log_level)
+logging.getLogger('DCOSAWSStack').setLevel(log_level)
 logging.getLogger('DCOSAuth').setLevel(log_level)
-logging.getLogger('DNSAlias').setLevel(log_level)
+logging.getLogger('DCOSDNSAlias').setLevel(log_level)
 logging.getLogger('requests').setLevel(log_level)
 log = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ def main(argv):
 
     for cluster in clusters:
         for stack in cluster['Stacks']:
-            dcos_stack = DCOSStack(stack)
+            dcos_stack = DCOSAWSStack(stack)
             dcos_stack.process_stack()
 
             if not admin_addr:
@@ -50,6 +50,7 @@ def main(argv):
             dcos_auth.check_login()
 
         if cluster['DNS']:
+            log.debug("creating DNS aliases")
             if admin_addr and cluster['DNS']['MasterAlias']:
                 dns_alias.create(cluster['DNS']['MasterAlias'], admin_addr)
             if pubagt_addr and cluster['DNS']['PubAgentAlias']:

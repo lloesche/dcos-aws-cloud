@@ -1,6 +1,7 @@
 import logging
 import boto3
 
+
 class DCOSDNSAlias:
     """Create a DNS CNAME"""
     def __init__(self):
