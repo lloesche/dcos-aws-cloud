@@ -227,4 +227,3 @@ class DCOSStack:
                 return value
 
         return None
-

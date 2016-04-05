@@ -128,4 +128,3 @@ class DCOSDNSAlias:
                     self.log.debug('zone {} with id {} is a match for {}'.format(z['Name'], z['Id'], hostname))
                     return z['Id']
         self.log.debug('no matching zone found for {}'.format(hostname))
-

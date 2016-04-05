@@ -208,3 +208,7 @@ class DCOSAuth:
             else:
                 self.log.info("default user doesn't exist and admin user works - everything looking good")
 
+# add default user back for testing purposes
+#        self.log.debug("WARNING: ADDING DEFAULT USER BACK FOR DEVELOPMENT")
+#        self.create_user(self.default_login['login'], self.default_login['password'], 'Super User')
+#        self.add_user_to_group(self.default_login['login'], 'superusers')

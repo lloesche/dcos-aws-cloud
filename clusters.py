@@ -56,10 +56,5 @@ def main(argv):
                 dns_alias.create(cluster['DNS']['PubAgentAlias'], pubagt_addr)
 
 
-# add default user back for testing purposes
-#        self.log.debug("WARNING: ADDING DEFAULT USER BACK FOR DEVELOPMENT")
-#        self.create_user(self.default_login['login'], self.default_login['password'], 'Super User')
-#        self.add_user_to_group(self.default_login['login'], 'superusers')
-
 if __name__ == "__main__":
     main(sys.argv[1:])
