@@ -13,7 +13,6 @@ logging.getLogger('__main__').setLevel(log_level)
 logging.getLogger('DCOSAWSStack').setLevel(log_level)
 logging.getLogger('DCOSAuth').setLevel(log_level)
 logging.getLogger('DCOSDNSAlias').setLevel(log_level)
-logging.getLogger('requests').setLevel(log_level)
 log = logging.getLogger(__name__)
 
 
