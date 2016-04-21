@@ -215,6 +215,19 @@ class DCOSAWSStack:
         """
         return self.first_output_value(['PublicSlaveDnsAddress', 'PublicAgentDNSName'])
 
+    @property
+    def admin_sg(self):
+        """The Admin Security Group
+
+        :rtype: Union[str, dict]
+        :return: A dict with the region and ID of the AdminSecurityGroup
+        """
+        sg_id = self.resources('AdminSecurityGroup')
+        if sg_id:
+            return {'region': self.settings['Region'], 'id': sg_id}
+
+        return None
+
     def first_output_value(self, keys):
         """Returns the first value found for a list of stack output keys
 

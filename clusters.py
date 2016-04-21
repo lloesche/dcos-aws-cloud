@@ -4,6 +4,7 @@ import logging
 import yaml
 from dcosutils.dcosauth import DCOSAuth
 from dcosutils.dcosawsstack import DCOSAWSStack
+from dcosutils.dcosawssg import DCOSAWSSecurityGroup
 from dcosutils.dcosdnsalias import DCOSDNSAlias
 
 
@@ -13,6 +14,7 @@ logging.getLogger('__main__').setLevel(log_level)
 logging.getLogger('DCOSAWSStack').setLevel(log_level)
 logging.getLogger('DCOSAuth').setLevel(log_level)
 logging.getLogger('DCOSDNSAlias').setLevel(log_level)
+logging.getLogger('DCOSAWSSecurityGroup').setLevel(log_level)
 log = logging.getLogger(__name__)
 
 
@@ -31,6 +33,7 @@ def main(argv):
     clusters = yaml.load(open(clusters_file).read())
 
     admin_addr = None
+    admin_sg = None
     pubagt_addr = None
     dns_alias = DCOSDNSAlias()
 
@@ -41,13 +44,23 @@ def main(argv):
 
             if not admin_addr:
                 admin_addr = dcos_stack.admin_addr
+            if not admin_sg:
+                admin_sg = dcos_stack.admin_sg
             if not pubagt_addr:
                 pubagt_addr = dcos_stack.pubagt_addr
 
+        # ensure that all admin locations are part of the security group
+        if admin_sg and cluster['AdminLocations']:
+            log.debug("permitting admin locations")
+            dcos_sg = DCOSAWSSecurityGroup(admin_sg['id'], admin_sg['region'])
+            dcos_sg.allow(cluster['AdminLocations'], [22, 80, 443])
+
+        # remove the default user and add the configured admin login
         if admin_addr:
             dcos_auth = DCOSAuth('https://' + admin_addr, cluster['Admin'], cluster['AdminPassword'], 'Admin')
             dcos_auth.check_login()
 
+        # create/update DNS aliases
         if cluster['DNS']:
             log.debug("creating DNS aliases")
             if admin_addr and cluster['DNS']['MasterAlias']:
