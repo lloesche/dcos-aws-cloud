@@ -32,12 +32,12 @@ def main(argv):
     log.debug("reading {}".format(clusters_file))
     clusters = yaml.load(open(clusters_file).read())
 
-    admin_addr = None
-    admin_sg = None
-    pubagt_addr = None
     dns_alias = DCOSDNSAlias()
 
     for cluster in clusters:
+        admin_addr = None
+        admin_sg = None
+        pubagt_addr = None
         for stack in cluster['Stacks']:
             dcos_stack = DCOSAWSStack(stack)
             dcos_stack.process_stack()
