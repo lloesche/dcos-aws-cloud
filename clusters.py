@@ -51,9 +51,10 @@ def main(argv):
 
         # ensure that all admin locations are part of the security group
         if admin_sg and cluster['AdminLocations']:
-            log.debug("permitting admin locations")
+            log.debug("permitting admin locations in {} ({})".format(admin_sg['id'], admin_sg['region']))
             dcos_sg = DCOSAWSSecurityGroup(admin_sg['id'], admin_sg['region'])
-            dcos_sg.allow(cluster['AdminLocations'], [22, 80, 443])
+            dcos_sg.allow(cluster['AdminLocations'], [22, 80, 443], source_type='cidr')
+            dcos_sg.allow([admin_sg['id']], [443], source_type='group')
 
         # remove the default user and add the configured admin login
         if admin_addr:
