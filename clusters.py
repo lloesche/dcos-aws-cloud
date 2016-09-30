@@ -58,7 +58,7 @@ def main(argv):
 
         # remove the default user and add the configured admin login
         if admin_addr:
-            dcos_auth = DCOSAuth('https://' + admin_addr, cluster['Admin'], cluster['AdminPassword'], 'Admin')
+            dcos_auth = DCOSAuth('http://' + admin_addr, cluster['Admin'], cluster['AdminPassword'], 'Admin')
             dcos_auth.check_login()
 
         # create/update DNS aliases
