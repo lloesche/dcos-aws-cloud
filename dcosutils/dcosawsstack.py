@@ -68,7 +68,7 @@ class DCOSAWSStack:
                         wait = True
                 except botocore.exceptions.ClientError as e:
                     if e.response['Error']['Code'] == 'ValidationError':
-                        self.log.info("nothing to update for stack {}".format(stack.name))
+                        self.log.info("not updating stack {}: {}".format(stack.name, e))
                     else:
                         self.log.warning(e)
             else:
