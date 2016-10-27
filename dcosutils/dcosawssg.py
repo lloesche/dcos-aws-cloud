@@ -65,8 +65,8 @@ class DCOSAWSSecurityGroup:
         :return: boolean
         """
         for permission in self.sg.ip_permissions:
-            for existing_source in permission[type_key]:
-                existing_source = existing_source[source_key]
-                if permission['FromPort'] == port and permission['ToPort'] == port and permission['IpProtocol'] == protocol and existing_source == source:
-                    return True
+            if permission['IpProtocol'] == protocol and permission['FromPort'] == port and permission['ToPort'] == port:
+                for existing_source in permission[type_key]:
+                    if existing_source[source_key] == source:
+                        return True
         return False
