@@ -1,0 +1,62 @@
+---
+- ClusterName: ProductionDCOS
+  Admin: admin
+  AdminPassword: FJQiunfg4TJhRGHD6P
+  DNS:
+    MasterAlias:
+      - dcos18.mesosphere.com
+    PubAgentAlias:
+      - pa.dcos18.mesosphere.com
+  AdminLocations:
+    - '217.110.123.251/32'
+    - '199.116.75.18/32'
+    - '12.161.175.2/32'
+    - '52.0.168.100/32'
+    - '52.4.101.52/32'
+  Stacks:
+  - StackName: ProductionDCOSInfra
+    Region: us-west-2
+    TemplateURL: https://s3-us-west-2.amazonaws.com/proddcos/templates/dcos186permissive/config_id/622384a9f618cb8221be67f588b703d16407ef60/cloudformation/infra.json
+    Parameters:
+      AdminLocation: '12.161.175.2/32'
+      InternetGateway: '@stack.ProductionDCOSBaseNetwork.resources.InternetGateway@'
+      KeyName: 'proddcos'
+      PrivateSubnet: '@stack.ProductionDCOSBaseNetwork.resources.PrivateSubnet@'
+      PublicSubnet: '@stack.ProductionDCOSBaseNetwork.resources.PublicSubnet@'
+      Vpc: '@stack.ProductionDCOSBaseNetwork.resources.Vpc@'
+  - StackName: ProductionDCOSMaster
+    Region: us-west-2
+    TemplateURL: https://s3-us-west-2.amazonaws.com/proddcos/templates/dcos186permissive/config_id/622384a9f618cb8221be67f588b703d16407ef60/cloudformation/ee.el7-advanced-master-5.json
+    Parameters:
+      AdminSecurityGroup: '@stack.ProductionDCOSInfra.resources.AdminSecurityGroup@'
+      ExhibitorS3Bucket: '@stack.ProductionDCOSInfra.resources.ExhibitorS3Bucket@'
+      KeyName: 'proddcos'
+      LbSecurityGroup: '@stack.ProductionDCOSInfra.resources.LbSecurityGroup@'
+      MasterInstanceType: 'm4.xlarge'
+      MasterSecurityGroup: '@stack.ProductionDCOSInfra.resources.MasterSecurityGroup@'
+      PrivateAgentSecurityGroup: '@stack.ProductionDCOSInfra.resources.PrivateAgentSecurityGroup@'
+      PrivateSubnet: '@stack.ProductionDCOSBaseNetwork.resources.PrivateSubnet@'
+      PublicAgentSecurityGroup: '@stack.ProductionDCOSInfra.resources.PublicAgentSecurityGroup@'
+      PublicSubnet: '@stack.ProductionDCOSBaseNetwork.resources.PublicSubnet@'
+  - StackName: ProductionDCOSPrivAgent
+    Region: us-west-2
+    TemplateURL: https://s3-us-west-2.amazonaws.com/proddcos/templates/dcos186permissive/config_id/622384a9f618cb8221be67f588b703d16407ef60/cloudformation/ee.el7-advanced-priv-agent.json
+    Parameters:
+      CustomAMI: 'ami-37cf6857'
+      InternalMasterLoadBalancerDnsName: '@stack.ProductionDCOSMaster.outputs.InternalMasterLoadBalancerDnsName@'
+      KeyName: 'proddcos'
+      PrivateAgentInstanceCount: 20
+      PrivateAgentInstanceType: 'm4.xlarge'
+      PrivateAgentSecurityGroup: '@stack.ProductionDCOSInfra.resources.PrivateAgentSecurityGroup@'
+      PrivateSubnet: '@stack.ProductionDCOSBaseNetwork.resources.PrivateSubnet@'
+  - StackName: ProductionDCOSPubAgent
+    Region: us-west-2
+    TemplateURL: https://s3-us-west-2.amazonaws.com/proddcos/templates/dcos186permissive/config_id/622384a9f618cb8221be67f588b703d16407ef60/cloudformation/ee.el7-advanced-pub-agent.json
+    Parameters:
+      CustomAMI: 'ami-37cf6857'
+      InternalMasterLoadBalancerDnsName: '@stack.ProductionDCOSMaster.outputs.InternalMasterLoadBalancerDnsName@'
+      KeyName: 'proddcos'
+      PublicAgentInstanceCount: 2
+      PublicAgentInstanceType: 'm4.xlarge'
+      PublicAgentSecurityGroup: '@stack.ProductionDCOSInfra.resources.PublicAgentSecurityGroup@'
+      PublicSubnet: '@stack.ProductionDCOSBaseNetwork.resources.PublicSubnet@'
