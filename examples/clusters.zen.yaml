@@ -1,0 +1,28 @@
+---
+- ClusterName: dcos-zen
+  Admin: admin
+  AdminPassword: letmein
+  DNS:
+    MasterAlias:
+      - dcos.example.com
+    PubAgentAlias:
+      - pa.dcos.example.com
+      - someservice.example.com
+  AdminLocations:
+    - '172.217.0.0/16'
+    - '84.46.0.0/17'
+  Stacks:
+  - StackName: DCOSZen
+    Region: eu-central-1
+    TemplateURL: http://downloads.dcos.io.s3.amazonaws.com/dcos/stable/cloudformation/coreos-zen-3.json
+    Parameters:
+      AdminLocation: '172.217.0.0/16'
+      KeyName: 'default'
+      InternetGateway: '@stack.DCOSBaseNetwork.resources.InternetGateway@'
+      PrivateAgentInstanceCount: 3
+      PrivateAgentInstanceType: 'm3.xlarge'
+      PrivateSubnet: '@stack.DCOSBaseNetwork.resources.PrivateSubnet@'
+      PublicAgentInstanceCount: 3
+      PublicAgentInstanceType: 'm3.xlarge'
+      PublicSubnet: '@stack.DCOSBaseNetwork.resources.PublicSubnet@'
+      Vpc: '@stack.DCOSBaseNetwork.resources.Vpc@'
