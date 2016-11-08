@@ -1,6 +1,6 @@
 {
   "AWSTemplateFormatVersion" : "2010-09-09",
-  "Description" : "Launching the Mesosphere DCOS cluster",
+  "Description" : "Launching the Mesosphere DC/OS cluster",
   "Metadata": {
     "DcosImageCommit": "unset",
     "TemplateGenerationDate": "unset"
