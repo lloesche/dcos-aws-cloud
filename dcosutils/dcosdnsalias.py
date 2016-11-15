@@ -8,12 +8,16 @@ class DCOSDNSAlias:
         self.log = logging.getLogger(self.__class__.__name__)
         self.r53 = boto3.client('route53')
         self.hosted_zones = []
+        # This blacklist has some hard coded hostnames that should never be
+        # updated even if they are defined as aliases in the clusters YAML
         self.blacklist = ['mesosphere.com',
                           'mesosphere.io',
                           'downloads.mesosphere.io',
                           'repos.mesosphere.com',
                           'docs.mesosphere.com',
-                          'open.mesosphere.com'
+                          'open.mesosphere.com',
+                          'dcos.io',
+                          'auth.dcos.io'
                           ]
 
     def create(self, hostnames, target):

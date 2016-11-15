@@ -204,7 +204,7 @@ class DCOSAuth:
             self.delete_user(self.default_login['login'])
         else:
             if not admin_exists:
-                self.log.info("default user doesn't exist but admin user doesn't work either - manual intervention required")
+                self.log.error("default user doesn't exist but admin user doesn't work either - manual intervention required")
             else:
                 self.log.info("default user doesn't exist and admin user works - everything looking good")
 

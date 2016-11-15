@@ -42,15 +42,22 @@ def main(argv):
     dns_alias = DCOSDNSAlias()
 
     for cluster in clusters:
-        admin_addr = None
-        admin_sg = None
-        pubagt_addr = None
+        admin_addr = None   # Hostname of the Adminrouter ELB
+        admin_sg = None     # Admin Security Group
+        pubagt_addr = None  # Public Agent ELB
+
         for stack in cluster['Stacks']:
+            # Regions are processed per Stack but for user convenience
+            # we allow copying the Region from the overall Cluster
+            # definition if it's not defined on the Stack level
             if 'Region' not in stack and 'Region' in cluster:
                 stack['Region'] = cluster['Region']
             dcos_stack = DCOSAWSStack(stack)
             dcos_stack.process_stack()
 
+            # Depending on which Cloudformation Template is being used
+            # (simple, zen or advanced) the following three Strings
+            # might appear in different Stacks
             if not admin_addr:
                 admin_addr = dcos_stack.admin_addr
             if not admin_sg:
@@ -58,19 +65,21 @@ def main(argv):
             if not pubagt_addr:
                 pubagt_addr = dcos_stack.pubagt_addr
 
-        # ensure that all admin locations are part of the security group
+        # Ensure that all admin locations are part of the security group.
+        # The Cloudformation template only allows a single network/IP to be allowed for access.
+        # This will add additional source IPs/networks to the admin security group.
         if admin_sg and 'AdminLocations' in cluster:
             log.debug("permitting admin locations in {} ({})".format(admin_sg['id'], admin_sg['region']))
             dcos_sg = DCOSAWSSecurityGroup(admin_sg['id'], admin_sg['region'])
             dcos_sg.allow(cluster['AdminLocations'], [22, 80, 443], source_type='cidr')
             # dcos_sg.allow([admin_sg['id']], [443], source_type='group')
 
-        # remove the default user and add the configured admin login
+        # On Enterprise DC/OS remove the default user and add the configured admin login
         if admin_addr and args.enterprise and 'Admin' in cluster and 'AdminPassword' in cluster:
             dcos_auth = DCOSAuth('http://' + admin_addr, cluster['Admin'], cluster['AdminPassword'], 'Admin')
             dcos_auth.check_login()
 
-        # create/update DNS aliases
+        # Create/update DNS aliases
         if 'DNS' in cluster and args.route53:
             log.debug("creating DNS aliases")
             if admin_addr and 'MasterAlias' in cluster['DNS']:
@@ -78,7 +87,7 @@ def main(argv):
             if pubagt_addr and 'PubAgentAlias' in cluster['DNS']:
                 dns_alias.create(cluster['DNS']['PubAgentAlias'], pubagt_addr)
 
-        # output login URL:
+        # Output login URL
         if admin_addr:
             log.info("Log in at http://{}".format(admin_addr))
             if 'DNS' in cluster and args.route53 and 'MasterAlias' in cluster['DNS']:
