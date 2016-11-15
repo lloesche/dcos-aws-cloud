@@ -1,0 +1,58 @@
+---
+- ClusterName: dcos-advanced
+  Admin: admin
+  AdminPassword: letmein
+  DNS:
+    MasterAlias:
+      - dcos.example.com
+    PubAgentAlias:
+      - pa.dcos.example.com
+      - someservice.example.com
+  AdminLocations:
+    - '172.217.0.0/16'
+    - '84.46.0.0/17'
+  Stacks:
+  - StackName: DCOSInfra
+    Region: eu-central-1
+    TemplateURL: http://mybucket.s3.amazonaws.com/somebucket/someid/cloudformation/infra.json
+    Parameters:
+      AdminLocation: '172.217.0.0/16'
+      InternetGateway: '@stack.DCOSBaseNetwork.resources.InternetGateway@'
+      KeyName: 'default'
+      PrivateSubnet: '@stack.DCOSBaseNetwork.resources.PrivateSubnet@'
+      PublicSubnet: '@stack.DCOSBaseNetwork.resources.PublicSubnet@'
+      Vpc: '@stack.DCOSBaseNetwork.resources.Vpc@'
+  - StackName: DCOSMaster
+    Region: eu-central-1
+    TemplateURL: http://mybucket.s3.amazonaws.com/somebucket/someid/cloudformation/el7-advanced-master-5.json
+    Parameters:
+      AdminSecurityGroup: '@stack.DCOSInfra.resources.AdminSecurityGroup@'
+      ExhibitorS3Bucket: '@stack.DCOSInfra.resources.ExhibitorS3Bucket@'
+      KeyName: 'default'
+      LbSecurityGroup: '@stack.DCOSInfra.resources.LbSecurityGroup@'
+      MasterInstanceType: 'm3.xlarge'
+      MasterSecurityGroup: '@stack.DCOSInfra.resources.MasterSecurityGroup@'
+      PrivateAgentSecurityGroup: '@stack.DCOSInfra.resources.PrivateAgentSecurityGroup@'
+      PrivateSubnet: '@stack.DCOSBaseNetwork.resources.PrivateSubnet@'
+      PublicAgentSecurityGroup: '@stack.DCOSInfra.resources.PublicAgentSecurityGroup@'
+      PublicSubnet: '@stack.DCOSBaseNetwork.resources.PublicSubnet@'
+  - StackName: DCOSPrivAgent
+    Region: eu-central-1
+    TemplateURL: http://mybucket.s3.amazonaws.com/somebucket/someid/cloudformation/el7-advanced-priv-agent.json
+    Parameters:
+      InternalMasterLoadBalancerDnsName: '@stack.DCOSMaster.outputs.InternalMasterLoadBalancerDnsName@'
+      KeyName: 'default'
+      PrivateAgentInstanceCount: 5
+      PrivateAgentInstanceType: 'm3.xlarge'
+      PrivateAgentSecurityGroup: '@stack.DCOSInfra.resources.PrivateAgentSecurityGroup@'
+      PrivateSubnet: '@stack.DCOSBaseNetwork.resources.PrivateSubnet@'
+  - StackName: DCOSPubAgent
+    Region: eu-central-1
+    TemplateURL: http://mybucket.s3.amazonaws.com/somebucket/someid/cloudformation/el7-advanced-pub-agent.json
+    Parameters:
+      InternalMasterLoadBalancerDnsName: '@stack.DCOSMaster.outputs.InternalMasterLoadBalancerDnsName@'
+      KeyName: 'default'
+      PublicAgentInstanceCount: 2
+      PublicAgentInstanceType: 'm3.xlarge'
+      PublicAgentSecurityGroup: '@stack.DCOSInfra.resources.PublicAgentSecurityGroup@'
+      PublicSubnet: '@stack.DCOSBaseNetwork.resources.PublicSubnet@'
