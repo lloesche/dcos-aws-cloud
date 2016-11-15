@@ -46,6 +46,8 @@ def main(argv):
         admin_sg = None
         pubagt_addr = None
         for stack in cluster['Stacks']:
+            if 'Region' not in stack and 'Region' in cluster:
+                stack['Region'] = cluster['Region']
             dcos_stack = DCOSAWSStack(stack)
             dcos_stack.process_stack()
 

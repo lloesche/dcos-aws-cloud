@@ -1,5 +1,6 @@
 ---
 - ClusterName: dcos-advanced
+  Region: eu-central-1
   Admin: admin
   AdminPassword: letmein
   DNS:
@@ -13,7 +14,6 @@
     - '84.46.0.0/17'
   Stacks:
   - StackName: DCOSInfra
-    Region: eu-central-1
     TemplateURL: http://mybucket.s3.amazonaws.com/somebucket/someid/cloudformation/infra.json
     Parameters:
       AdminLocation: '172.217.0.0/16'
@@ -23,7 +23,6 @@
       PublicSubnet: '@stack.DCOSBaseNetwork.resources.PublicSubnet@'
       Vpc: '@stack.DCOSBaseNetwork.resources.Vpc@'
   - StackName: DCOSMaster
-    Region: eu-central-1
     TemplateURL: http://mybucket.s3.amazonaws.com/somebucket/someid/cloudformation/el7-advanced-master-5.json
     Parameters:
       AdminSecurityGroup: '@stack.DCOSInfra.resources.AdminSecurityGroup@'
@@ -37,7 +36,6 @@
       PublicAgentSecurityGroup: '@stack.DCOSInfra.resources.PublicAgentSecurityGroup@'
       PublicSubnet: '@stack.DCOSBaseNetwork.resources.PublicSubnet@'
   - StackName: DCOSPrivAgent
-    Region: eu-central-1
     TemplateURL: http://mybucket.s3.amazonaws.com/somebucket/someid/cloudformation/el7-advanced-priv-agent.json
     Parameters:
       InternalMasterLoadBalancerDnsName: '@stack.DCOSMaster.outputs.InternalMasterLoadBalancerDnsName@'
@@ -47,7 +45,6 @@
       PrivateAgentSecurityGroup: '@stack.DCOSInfra.resources.PrivateAgentSecurityGroup@'
       PrivateSubnet: '@stack.DCOSBaseNetwork.resources.PrivateSubnet@'
   - StackName: DCOSPubAgent
-    Region: eu-central-1
     TemplateURL: http://mybucket.s3.amazonaws.com/somebucket/someid/cloudformation/el7-advanced-pub-agent.json
     Parameters:
       InternalMasterLoadBalancerDnsName: '@stack.DCOSMaster.outputs.InternalMasterLoadBalancerDnsName@'
