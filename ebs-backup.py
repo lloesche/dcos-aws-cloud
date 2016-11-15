@@ -9,8 +9,10 @@ logging.basicConfig(level=logging.WARN, format='%(asctime)s - %(levelname)s - %(
 logging.getLogger('__main__').setLevel(log_level)
 logging.getLogger('EBSBackup').setLevel(log_level)
 
+
 def main(argv):
-    config = yaml.load(open('ebs-backup.yaml').read())
+    backup_file = argv[0] if len(argv) > 0 else 'ebs-backup.yaml'
+    config = yaml.load(open(backup_file).read())
     ebs_backup = EBSBackup(config)
     ebs_backup.backup()
 
