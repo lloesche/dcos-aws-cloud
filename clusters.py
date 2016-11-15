@@ -44,7 +44,9 @@ def main(argv):
     for cluster in clusters:
         admin_addr = None   # Hostname of the Adminrouter ELB
         admin_sg = None     # Admin Security Group
-        pubagt_addr = None  # Public Agent ELB
+        pubagt_addr = None  # Public Agent ELB Hostname
+        master_elb = None   # Master ELB ID
+        pubagt_elb = None   # Public Agent ELB ID
 
         for stack in cluster['Stacks']:
             # Regions are processed per Stack but for user convenience
@@ -64,6 +66,10 @@ def main(argv):
                 admin_sg = dcos_stack.admin_sg
             if not pubagt_addr:
                 pubagt_addr = dcos_stack.pubagt_addr
+            if not master_elb:
+                master_elb = dcos_stack.master_elb
+            if not pubagt_elb:
+                pubagt_elb = dcos_stack.pubagt_elb
 
         # Ensure that all admin locations are part of the security group.
         # The Cloudformation template only allows a single network/IP to be allowed for access.
@@ -82,16 +88,18 @@ def main(argv):
         # Create/update DNS aliases
         if 'DNS' in cluster and args.route53:
             log.debug("creating DNS aliases")
-            if admin_addr and 'MasterAlias' in cluster['DNS']:
-                dns_alias.create(cluster['DNS']['MasterAlias'], admin_addr)
-            if pubagt_addr and 'PubAgentAlias' in cluster['DNS']:
-                dns_alias.create(cluster['DNS']['PubAgentAlias'], pubagt_addr)
+            if master_elb and 'MasterAlias' in cluster['DNS']:
+                dns_alias.create(cluster['DNS']['MasterAlias'], elb_id=master_elb['id'],
+                                 elb_region=master_elb['region'])
+            if pubagt_elb and 'PubAgentAlias' in cluster['DNS']:
+                dns_alias.create(cluster['DNS']['PubAgentAlias'], elb_id=pubagt_elb['id'],
+                                 elb_region=pubagt_elb['region'])
 
         # Output login URL
         if admin_addr:
-            log.info("Log in at http://{}".format(admin_addr))
+            log.info("log in at http://{}/".format(admin_addr))
             if 'DNS' in cluster and args.route53 and 'MasterAlias' in cluster['DNS']:
-                log.info("or at http://{} if previous R53 operation was successful".format(cluster['DNS']['MasterAlias'][0]))
+                log.info("or at http://{}/ if previous R53 operation was successful".format(cluster['DNS']['MasterAlias'][0]))
 
 
 if __name__ == "__main__":

@@ -228,6 +228,32 @@ class DCOSAWSStack:
 
         return None
 
+    @property
+    def master_elb(self):
+        """The Master ELB
+
+        :rtype: Union[str, dict]
+        :return: A dict with the region and ID of the Master ELB
+        """
+        elb_id = self.resources('ElasticLoadBalancer')
+        if elb_id:
+            return {'region': self.settings['Region'], 'id': elb_id}
+
+        return None
+
+    @property
+    def pubagt_elb(self):
+        """The Public Agent ELB
+
+        :rtype: Union[str, dict]
+        :return: A dict with the region and ID of the Public Agent ELB
+        """
+        elb_id = self.resources('PublicAgentLoadBalancer')
+        if elb_id:
+            return {'region': self.settings['Region'], 'id': elb_id}
+
+        return None
+
     def first_output_value(self, keys):
         """Returns the first value found for a list of stack output keys
 
