@@ -249,6 +249,11 @@ class DCOSAWSStack:
         :return: A dict with the region and ID of the Public Agent ELB
         """
         elb_id = self.resources('PublicAgentLoadBalancer')
+
+        if not elb_id:
+            # fallback for older DC/OS versions
+            elb_id = self.resources('PublicSlaveLoadBalancer')
+
         if elb_id:
             return {'region': self.settings['Region'], 'id': elb_id}
 
