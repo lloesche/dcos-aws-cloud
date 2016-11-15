@@ -2,6 +2,7 @@
 import sys
 import logging
 import yaml
+import argparse
 from dcosutils.dcosauth import DCOSAuth
 from dcosutils.dcosawsstack import DCOSAWSStack
 from dcosutils.dcosawssg import DCOSAWSSecurityGroup
@@ -26,11 +27,17 @@ def main(argv):
     After that it checks that the default bootstrap user no longer exists and that the
     admin user has been created.
     """
+    p = argparse.ArgumentParser(description='Install DC/OS on AWS Cloud')
+    p.add_argument('--clusters', help='YAML File with the Clusters definition (default: clusters.yaml)',
+                   dest='clusters_file', default='clusters.yaml')
+    p.add_argument('--no-r53', help="Don't attempt to update AWS R53", dest='route53', action='store_false',
+                   default=True)
+    p.add_argument('--ee', help="Assume Installation of Enterprise DC/OS", dest='enterprise',
+                   action='store_true', default=False)
+    args = p.parse_args(argv)
 
-    clusters_file = argv[0] if len(argv) > 0 else 'clusters.yaml'
-
-    log.debug("reading {}".format(clusters_file))
-    clusters = yaml.load(open(clusters_file).read())
+    log.debug("reading {}".format(args.clusters_file))
+    clusters = yaml.load(open(args.clusters_file).read())
 
     dns_alias = DCOSDNSAlias()
 
@@ -50,24 +57,30 @@ def main(argv):
                 pubagt_addr = dcos_stack.pubagt_addr
 
         # ensure that all admin locations are part of the security group
-        if admin_sg and cluster['AdminLocations']:
+        if admin_sg and 'AdminLocations' in cluster:
             log.debug("permitting admin locations in {} ({})".format(admin_sg['id'], admin_sg['region']))
             dcos_sg = DCOSAWSSecurityGroup(admin_sg['id'], admin_sg['region'])
             dcos_sg.allow(cluster['AdminLocations'], [22, 80, 443], source_type='cidr')
             # dcos_sg.allow([admin_sg['id']], [443], source_type='group')
 
         # remove the default user and add the configured admin login
-        if admin_addr:
+        if admin_addr and args.enterprise and 'Admin' in cluster and 'AdminPassword' in cluster:
             dcos_auth = DCOSAuth('http://' + admin_addr, cluster['Admin'], cluster['AdminPassword'], 'Admin')
             dcos_auth.check_login()
 
         # create/update DNS aliases
-        if cluster['DNS']:
+        if 'DNS' in cluster and args.route53:
             log.debug("creating DNS aliases")
-            if admin_addr and cluster['DNS']['MasterAlias']:
+            if admin_addr and 'MasterAlias' in cluster['DNS']:
                 dns_alias.create(cluster['DNS']['MasterAlias'], admin_addr)
-            if pubagt_addr and cluster['DNS']['PubAgentAlias']:
+            if pubagt_addr and 'PubAgentAlias' in cluster['DNS']:
                 dns_alias.create(cluster['DNS']['PubAgentAlias'], pubagt_addr)
+
+        # output login URL:
+        if admin_addr:
+            log.info("Log in at http://{}".format(admin_addr))
+            if 'DNS' in cluster and args.route53 and 'MasterAlias' in cluster['DNS']:
+                log.info("or at http://{} if previous R53 operation was successful".format(cluster['DNS']['MasterAlias'][0]))
 
 
 if __name__ == "__main__":

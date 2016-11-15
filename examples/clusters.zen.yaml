@@ -1,7 +1,5 @@
 ---
 - ClusterName: dcos-zen
-  Admin: admin
-  AdminPassword: letmein
   DNS:
     MasterAlias:
       - dcos.example.com

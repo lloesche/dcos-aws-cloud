@@ -1,7 +1,5 @@
 ---
 - ClusterName: dcos-advanced
-  Admin: admin
-  AdminPassword: letmein
   DNS:
     MasterAlias:
       - dcos.example.com

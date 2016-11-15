@@ -1,22 +1,17 @@
 ---
 - ClusterName: dcos-simple
-  Admin: admin
-  AdminPassword: letmein
   DNS:
     MasterAlias:
       - dcos.example.com
     PubAgentAlias:
       - pa.dcos.example.com
       - someservice.example.com
-  AdminLocations:
-    - '172.217.0.0/16'
-    - '84.46.0.0/17'
   Stacks:
   - StackName: DCOSSimple
     Region: us-east-1
     TemplateURL: http://downloads.dcos.io.s3.amazonaws.com/dcos/stable/cloudformation/multi-master.cloudformation.json
     Parameters:
-      AdminLocation: '172.217.0.0/16'
+      AdminLocation: '0.0.0.0/0'
       KeyName: 'default'
       SlaveInstanceCount: 2
       PublicSlaveInstanceCount: 1
