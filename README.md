@@ -1,4 +1,4 @@
-# aws-dcos-install
+# dcos-aws-cloud
 AWS installer scripts for DC/OS
 
 Script to automatically deploy, update and backup our AWS DC/OS production cluster(s).

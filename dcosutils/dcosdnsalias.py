@@ -45,23 +45,17 @@ class DCOSDNSAlias:
                 self.log.error('requires either target or elb_id and elb_region')
                 return False
 
-        if isinstance(hostnames, list):
-            for hostname in hostnames:
-                if dst_zone_id:
-                    self.create_alias(hostname, target, dst_zone_id)
-                else:
-                    if force_alias:
-                        self.create_alias(hostname, target)
-                    else:
-                        self.create_cname(hostname, target)
-        else:
+        if not isinstance(hostnames, list):
+            hostnames = [hostnames]
+
+        for hostname in hostnames:
             if dst_zone_id:
-                self.create_alias(hostnames, target, dst_zone_id)
+                self.create_alias(hostname, target, dst_zone_id)
             else:
                 if force_alias:
-                    self.create_alias(hostnames, target)
+                    self.create_alias(hostname, target)
                 else:
-                    self.create_cname(hostnames, target)
+                    self.create_cname(hostname, target)
 
     def create_cname(self, hostname, target):
         """Create a CNAME
